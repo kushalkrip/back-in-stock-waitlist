@@ -11,12 +11,14 @@
     "overridesDir": "overrides"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@salesforce/retail-react-app": "10.2.0"
   },
   "scripts": {
     "lint": "pwa-kit-dev lint \"**/*.{js,jsx}\"",
     "push": "npm run build && pwa-kit-dev push -t production",
     "test": "pwa-kit-dev test",
+    "test:e2e": "playwright test",
     "build": "npm run build-translations && pwa-kit-dev build",
     "start": "set -a; [ -f .env ] && . ./.env; set +a; cross-env NODE_ICU_DATA=node_modules/full-icu pwa-kit-dev start",
     "format": "pwa-kit-dev format \"**/*.{js,jsx}\"",

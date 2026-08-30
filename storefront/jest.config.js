@@ -10,8 +10,12 @@ const base = require('@salesforce/pwa-kit-dev/configs/jest/jest.config.js')
 
 module.exports = {
     ...base,
-    // To support extensibility, jest needs to transform the underlying templates/extensions
-    transformIgnorePatterns: ['/node_modules/(?!@salesforce/retail-react-app/.*)'],
+    // To support extensibility, jest needs to transform the underlying templates/extensions.
+    // cc-datacloud-typescript ships ESM only and is pulled in transitively via the provider
+    // tree (recommended-products -> use-datacloud), so it must be transformed too.
+    transformIgnorePatterns: [
+        '/node_modules/(?!(@salesforce/retail-react-app|@salesforce/cc-datacloud-typescript)/.*)'
+    ],
     moduleNameMapper: {
         ...base.moduleNameMapper,
         // pulled from @salesforce/retail-react-app jest.config.js

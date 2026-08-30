@@ -36,15 +36,12 @@ import {
  * developing against demo data we run in MOCK_MODE: submit simulates a
  * successful call. Set WAITLIST_LIVE=true at build time once the endpoint is
  * deployed and a real SLAS client is configured.
- *
- * NOTE: this is a synced mirror of the runnable copy at
- * ../../../../overrides/app/components/notify-me/index.jsx in the storefront.
- * Keep the two identical; the storefront copy is the source of truth.
  */
 const SCAPI_PATH = 'custom/waitlist/v1'
 // `process` is only defined server-side in the PWA Kit bundle; guard it so the
-// browser doesn't throw ReferenceError at import.
-const MOCK_MODE = typeof process === 'undefined' || process.env.WAITLIST_LIVE !== 'true'
+// browser doesn't throw ReferenceError. Evaluated at submit time (not import)
+// so the flag can be toggled per environment/test rather than frozen once.
+const isMockMode = () => typeof process === 'undefined' || process.env.WAITLIST_LIVE !== 'true'
 
 const NotifyMeForm = ({sku, locale}) => {
     const intl = useIntl()
@@ -105,7 +102,7 @@ const NotifyMeForm = ({sku, locale}) => {
         if (state === 'sending') return
         setState('sending')
         try {
-            const ok = MOCK_MODE ? await submitMock() : await submitLive()
+            const ok = isMockMode() ? await submitMock() : await submitLive()
             setState(ok ? 'done' : 'error')
         } catch (err) {
             setState('error')

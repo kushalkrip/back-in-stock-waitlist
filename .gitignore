@@ -13,6 +13,13 @@ coverage/
 # Rendered docs (source .md is committed; HTML is generated)
 docs/_rendered/
 
+# Playwright artifacts (specs + config are committed; runs are not)
+test-results/
+playwright-report/
+**/test-results/
+**/playwright-report/
+.playwright/
+
 # Logs / OS / editor cruft
 *.log
 .DS_Store
