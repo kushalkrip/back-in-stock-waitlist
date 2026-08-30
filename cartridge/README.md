@@ -144,6 +144,22 @@ mark it FAILED (hard error).
 
 ---
 
+## Testing
+
+Three layers, designed so the **write path is provable with no instance, no SLAS,
+and no login** — see `docs/TESTING.md` for the full recipe.
+
+- **PWA component tests** (Jest) — the `NotifyMeForm` state machine + local-hint,
+  in mock mode. `npm test -- notify-me` (8 green).
+- **SFRA parity unit tests** (Mocha) — the **real custom-object write logic** (dedupe,
+  server-derived email, status codes) driven through the controller with `server` and
+  every `dw/*` class stubbed via proxyquire. `cd app_waitlist && npm install && npm test`
+  (11 green). Proves SLAS is a transport concern, not a business-logic dependency.
+- **Manual live test** (curl / browser) — the same logic on a real sandbox through
+  login + CSRF + `CustomObjectMgr`, using only a session cookie (no SLAS token).
+
+---
+
 ## Honest limitations
 
 - **At-least-once, not exactly-once.** A crash between a successful service call and the

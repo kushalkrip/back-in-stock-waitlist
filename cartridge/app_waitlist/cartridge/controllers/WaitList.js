@@ -74,8 +74,10 @@ server.post(
     }
 );
 
-// Status check consumed by the PDP on load so an already-subscribed shopper
-// sees a passive confirmation instead of a re-submittable button.
+// Status read for an authoritative/cross-device account "my waitlist" view.
+// Deliberately NOT called by the PDP on load — the write is idempotent, so the
+// storefront uses a zero-latency local hint there instead (see docs/UI-DESIGN.md
+// LOCKED #4). Kept because the read is cheap and useful off the hot path.
 server.get(
     'Status',
     server.middleware.https,

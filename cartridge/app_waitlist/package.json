@@ -2,5 +2,14 @@
     "name": "app_waitlist",
     "version": "1.0.0",
     "description": "Back-In-Stock Waitlist Engine cartridge (SCAPI endpoint, chunk job, outbound service).",
-    "steptypes": "./steptypes.json"
+    "steptypes": "./steptypes.json",
+    "scripts": {
+        "test": "mocha --reporter spec --recursive test/unit"
+    },
+    "devDependencies": {
+        "chai": "^4.3.10",
+        "mocha": "^10.7.3",
+        "proxyquire": "^2.1.3",
+        "sinon": "^17.0.1"
+    }
 }
