@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Service definition for the outbound notify call.
+
+  NOTE: The services import schema is version-sensitive and easy to get wrong.
+  The most reliable path is to create these three objects in Business Manager
+  (Administration > Operations > Services) using the values below, then EXPORT
+  them to regenerate this file authoritatively for your instance. This file is
+  provided as a reference / starting point.
+
+  Values to configure:
+    Credential  waitlist.http.notify.cred
+      URL       = https://webhook.site/<YOUR-UNIQUE-UUID>   (mock email sink)
+    Profile     waitlist.http.notify.profile
+      Timeout (ms)                 = 5000
+      Circuit breaker              = enabled, 5 calls / 30000 ms
+      Rate limit                   = enabled, 50 calls / 60000 ms
+    Service     waitlist.http.notify
+      Type      = HTTP
+      Enabled   = true
+      Mock mode = false  (set true to exercise mockCall on a bare sandbox)
+-->
+<services xmlns="http://www.demandware.com/xml/impex/services/2014-09-26">
+    <service-credential service-credential-id="waitlist.http.notify.cred">
+        <url>https://webhook.site/REPLACE-WITH-YOUR-UNIQUE-UUID</url>
+        <user/>
+        <password/>
+    </service-credential>
+    <service-profile service-profile-id="waitlist.http.notify.profile">
+        <timeout>5000</timeout>
+        <enable-circuit-breaker>true</enable-circuit-breaker>
+        <max-error-count-for-circuit-breaker>5</max-error-count-for-circuit-breaker>
+        <interval-for-circuit-breaker>30000</interval-for-circuit-breaker>
+        <enable-rate-limit>true</enable-rate-limit>
+        <max-calls-for-rate-limit>50</max-calls-for-rate-limit>
+        <interval-for-rate-limit>60000</interval-for-rate-limit>
+    </service-profile>
+    <service service-id="waitlist.http.notify">
+        <service-type>HTTP</service-type>
+        <enabled>true</enabled>
+        <log-prefix>waitlist-notify</log-prefix>
+        <communication-log-enabled>true</communication-log-enabled>
+        <mock-mode>false</mock-mode>
+        <profile-id>waitlist.http.notify.profile</profile-id>
+        <credential-id>waitlist.http.notify.cred</credential-id>
+    </service>
+</services>

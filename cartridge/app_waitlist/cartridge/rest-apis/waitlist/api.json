@@ -1,0 +1,9 @@
+{
+    "endpoints": [
+        {
+            "endpoint": "waitlist",
+            "schema": "schema.yaml",
+            "implementation": "script"
+        }
+    ]
+}

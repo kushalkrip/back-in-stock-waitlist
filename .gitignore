@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build / generated output
+build/
+dist/
+coverage/
+**/build/
+**/dist/
+**/coverage/
+
+# Rendered docs (source .md is committed; HTML is generated)
+docs/_rendered/
+
+# Logs / OS / editor cruft
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local env / secrets — never commit credentials
+.env
+.env.*

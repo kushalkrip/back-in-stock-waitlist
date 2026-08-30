@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xmlns="http://www.demandware.com/xml/impex/metadata/2006-10-31">
+    <custom-type type-id="WaitlistSubscription">
+        <display-name xml:lang="x-default">Back-In-Stock Waitlist Subscription</display-name>
+        <staging-mode>no-staging</staging-mode>
+        <storage-scope>site</storage-scope>
+        <key-definition attribute-id="subscriptionKey">
+            <display-name xml:lang="x-default">Subscription Key</display-name>
+            <type>string</type>
+            <min-length>0</min-length>
+        </key-definition>
+        <attribute-definitions>
+            <attribute-definition attribute-id="email">
+                <display-name xml:lang="x-default">Email</display-name>
+                <type>string</type>
+                <mandatory-flag>true</mandatory-flag>
+                <externally-managed-flag>false</externally-managed-flag>
+                <min-length>0</min-length>
+            </attribute-definition>
+            <attribute-definition attribute-id="productID">
+                <display-name xml:lang="x-default">Product ID (Variant SKU)</display-name>
+                <type>string</type>
+                <mandatory-flag>true</mandatory-flag>
+                <externally-managed-flag>false</externally-managed-flag>
+                <min-length>0</min-length>
+            </attribute-definition>
+            <attribute-definition attribute-id="status">
+                <display-name xml:lang="x-default">Status</display-name>
+                <type>enum-of-string</type>
+                <mandatory-flag>true</mandatory-flag>
+                <externally-managed-flag>false</externally-managed-flag>
+                <value-definitions>
+                    <value-definition default="true">
+                        <display xml:lang="x-default">Pending</display>
+                        <value>PENDING</value>
+                    </value-definition>
+                    <value-definition>
+                        <display xml:lang="x-default">Notified</display>
+                        <value>NOTIFIED</value>
+                    </value-definition>
+                    <value-definition>
+                        <display xml:lang="x-default">Failed</display>
+                        <value>FAILED</value>
+                    </value-definition>
+                </value-definitions>
+            </attribute-definition>
+            <attribute-definition attribute-id="locale">
+                <display-name xml:lang="x-default">Locale</display-name>
+                <type>string</type>
+                <externally-managed-flag>false</externally-managed-flag>
+                <min-length>0</min-length>
+            </attribute-definition>
+            <attribute-definition attribute-id="createdAt">
+                <display-name xml:lang="x-default">Created At</display-name>
+                <type>datetime</type>
+                <externally-managed-flag>false</externally-managed-flag>
+            </attribute-definition>
+            <attribute-definition attribute-id="notifiedAt">
+                <display-name xml:lang="x-default">Notified At</display-name>
+                <type>datetime</type>
+                <externally-managed-flag>false</externally-managed-flag>
+            </attribute-definition>
+            <attribute-definition attribute-id="attemptCount">
+                <display-name xml:lang="x-default">Attempt Count</display-name>
+                <type>int</type>
+                <externally-managed-flag>false</externally-managed-flag>
+            </attribute-definition>
+        </attribute-definitions>
+        <group-definitions>
+            <attribute-group group-id="general">
+                <display-name xml:lang="x-default">General</display-name>
+                <attribute attribute-id="email"/>
+                <attribute attribute-id="productID"/>
+                <attribute attribute-id="status"/>
+                <attribute attribute-id="locale"/>
+                <attribute attribute-id="createdAt"/>
+                <attribute attribute-id="notifiedAt"/>
+                <attribute attribute-id="attemptCount"/>
+            </attribute-group>
+        </group-definitions>
+    </custom-type>
+</metadata>

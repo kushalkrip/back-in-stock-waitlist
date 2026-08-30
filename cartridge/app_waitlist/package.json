@@ -1,0 +1,6 @@
+{
+    "name": "app_waitlist",
+    "version": "1.0.0",
+    "description": "Back-In-Stock Waitlist Engine cartridge (SCAPI endpoint, chunk job, outbound service).",
+    "steptypes": "./steptypes.json"
+}

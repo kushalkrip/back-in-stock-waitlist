@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  RECONCILIATION half of the hybrid trigger (docs/HLD.md DECISIONS LOCKED #3 +
+  §5). This scheduled job runs the WaitlistNotifyStep as a safety net: it
+  catches manual BM stock edits, feed deltas that didn't map cleanly, and rows
+  left PENDING by a prior transient failure. It is cheap to run frequently
+  because an idle run does one inventory check per distinct waiting SKU (the
+  step-scoped skuCache) and exits -- it does NOT scan all-time signups.
+
+  EVENT-PRIMARY half (near-real-time): register the SAME custom.WaitlistNotifyStep
+  as a step immediately AFTER the inventory import step, so a restock notifies
+  within seconds instead of on the next tick. Both paths run identical step code.
+
+  Imports via Administration > Operations > Import & Export > Jobs, or recreate
+  in the Jobs UI. Set the site scope to the site whose waitlist you want
+  processed (e.g. RefArchGlobal). Replace <SITE-ID> below with your site.
+-->
+<jobs xmlns="http://www.demandware.com/xml/impex/jobs/2015-07-01">
+    <job job-id="WaitlistNotify">
+        <description>Notify back-in-stock waitlist subscribers for replenished SKUs.</description>
+        <parameters/>
+        <flow>
+            <context site-id="SITE-ID"/>
+            <step step-id="notify" type="custom.WaitlistNotifyStep" enforce-restart="false">
+                <description>Walk PENDING rows, check inventory, notify, update status.</description>
+                <parameters>
+                    <parameter name="NotifyThreshold">1</parameter>
+                </parameters>
+            </step>
+        </flow>
+        <rules>
+            <on-exit status="ERROR">
+                <stop-job/>
+            </on-exit>
+        </rules>
+        <triggers>
+            <run-recurring enabled="true">
+                <recurrence>
+                    <date-from>2026-01-01Z</date-from>
+                    <start-time>00:00:00.000Z</start-time>
+                    <interval>5</interval>
+                    <interval-unit>minutes</interval-unit>
+                    <day-of-week>
+                        <weekday>Monday</weekday>
+                        <weekday>Tuesday</weekday>
+                        <weekday>Wednesday</weekday>
+                        <weekday>Thursday</weekday>
+                        <weekday>Friday</weekday>
+                        <weekday>Saturday</weekday>
+                        <weekday>Sunday</weekday>
+                    </day-of-week>
+                </recurrence>
+            </run-recurring>
+        </triggers>
+    </job>
+</jobs>

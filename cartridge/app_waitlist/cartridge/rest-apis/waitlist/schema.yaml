@@ -1,0 +1,81 @@
+openapi: 3.0.0
+info:
+  title: Back-In-Stock Waitlist API
+  description: >
+    Accepts "notify me when back in stock" signups from the PDP and persists
+    them as WaitlistSubscription custom objects. REGISTERED-USERS-ONLY: the
+    subscriber email is derived server-side from the authenticated shopper's
+    profile and is never accepted in the request body; a guest token is
+    rejected with 401.
+  # info.version drives the MAJOR version segment in the URL: v1
+  version: 1.0.0
+servers:
+  - url: https://{shortCode}.api.commercecloud.salesforce.com/custom/waitlist/v1
+    variables:
+      shortCode:
+        default: your-short-code
+paths:
+  /organizations/{organizationId}/subscriptions:
+    post:
+      summary: Join the back-in-stock waitlist for a SKU
+      operationId: joinWaitlist
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: siteId
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionRequest'
+      responses:
+        '200':
+          description: Subscription created or already existed (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '400':
+          description: Invalid input (invalid-json / invalid-sku)
+        '401':
+          description: Not a registered, authenticated shopper (guest-not-allowed / no-account-email)
+        '500':
+          description: Persistence error
+      security:
+        - ShopperToken: []
+components:
+  securitySchemes:
+    ShopperToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    SubscriptionRequest:
+      type: object
+      required:
+        - sku
+      properties:
+        sku:
+          type: string
+          description: The selected VARIANT product ID (not the master).
+        locale:
+          type: string
+          example: en_US
+      # NOTE: there is intentionally NO `email` property. The subscriber email
+      # is resolved server-side from the authenticated shopper's profile.
+    SubscriptionResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [subscribed, already-subscribed]
+        sku:
+          type: string

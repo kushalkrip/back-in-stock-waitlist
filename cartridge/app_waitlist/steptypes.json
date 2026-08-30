@@ -1,0 +1,40 @@
+{
+    "step-types": {
+        "chunk-script-module-step": [
+            {
+                "@type-id": "custom.WaitlistNotifyStep",
+                "@supports-parallel-execution": "false",
+                "@supports-site-context": "true",
+                "@supports-organization-context": "false",
+                "description": "Notify back-in-stock waitlist subscribers for replenished SKUs.",
+                "module": "app_waitlist/cartridge/scripts/steps/notifyWaitlist.js",
+                "before-step-function": "beforeStep",
+                "total-count-function": "getTotalCount",
+                "read-function": "read",
+                "process-function": "process",
+                "write-function": "write",
+                "after-step-function": "afterStep",
+                "chunk-size": 50,
+                "transactional": "false",
+                "parameters": {
+                    "parameter": [
+                        {
+                            "@name": "NotifyThreshold",
+                            "@type": "long",
+                            "@required": false,
+                            "description": "Minimum available-to-sell quantity before notifying. Default 1.",
+                            "@min-value": 1
+                        }
+                    ]
+                },
+                "status-codes": {
+                    "status": [
+                        { "@code": "OK", "description": "Completed successfully." },
+                        { "@code": "ERROR", "description": "Step failed." },
+                        { "@code": "FINISHED_WITH_WARNINGS", "description": "Some notifications deferred; will retry next run." }
+                    ]
+                }
+            }
+        ]
+    }
+}
