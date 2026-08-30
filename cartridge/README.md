@@ -20,16 +20,19 @@ periodically checks **variant-level** inventory and, on replenishment, calls an
 Shopper (PWA Kit PDP, React)  — REGISTERED USERS ONLY
   variant.orderable === false  ->  render <NotifyMeForm sku=selectedVariantId>
         guest  -> "Sign in to be notified" prompt (opens AuthModal)
-        registered -> GET status on mount:
-                        subscribed  -> passive "already on the list" (no button)
-                        not subscribed -> one-tap "Notify me" (no email field)
-        │  GET  {sku}          (mount-time status check; email from token)
+        registered -> read LOCAL hint on mount (localStorage, NO network):
+                        hint set     -> passive "already on the list" (no button)
+                        no hint      -> one-tap "Notify me" (no email field)
         │  POST {sku, locale}  (SLAS registered token; NO email in body)
+        │  (on success -> write localStorage hint so a refresh shows "already")
         ▼
 Custom SCAPI endpoint  /custom/waitlist/v1/organizations/{orgId}/subscriptions
-  GET  ?sku=..  reject nothing (fail-open) -> {subscribed:bool}   (getWaitlistStatus)
   POST          reject guest token (401) -> email = session customer profile email
                 -> query-before-insert dedupe -> Transaction.wrap(createCustomObject)
+                -> 200 {status: subscribed | already-subscribed}  (idempotent)
+  GET  ?sku=..  fail-open -> {subscribed:bool}   (getWaitlistStatus)
+                account "my waitlist" view ONLY — NOT called by the PDP (kept off
+                the critical path; the idempotent POST makes re-clicks harmless)
         ▼
 Custom Object  WaitlistSubscription  (key = sha256(email|sku))
   email(server-derived), productID(VARIANT SKU),

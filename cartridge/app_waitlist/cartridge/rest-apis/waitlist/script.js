@@ -7,10 +7,11 @@
  * Body: { "sku": "variant-sku", "locale": "en_US" }   <-- NO email
  *
  * GET  /custom/waitlist/v1/organizations/{organizationId}/subscriptions?siteId=...&sku=variant-sku
- * Returns { "subscribed": bool, "sku": "variant-sku" } so the PDP can render a
- * passive "you're already on the list" state (instead of an actionable button)
- * on load — otherwise a subscribed shopper who refreshes could create a
- * duplicate row.
+ * Returns { "subscribed": bool, "sku": "variant-sku" } — an authoritative,
+ * cross-device status read for an account "my waitlist" view. It is deliberately
+ * NOT called by the PDP on load: the write is idempotent (see below), so the PDP
+ * uses a zero-latency local hint instead and never spends a round-trip here on
+ * the critical path (see docs/UI-DESIGN.md LOCKED #4).
  *
  * REGISTERED-USERS-ONLY (see docs/HLD.md DECISIONS LOCKED #2). The email is
  * NEVER accepted from the request body; it is derived server-side from the
@@ -111,11 +112,15 @@ exports.joinWaitlist.public = true;
 /**
  * Report whether the authenticated shopper is already on the waitlist for a SKU.
  *
- * Lenient by design: this is a benign read the PDP performs on mount. The email
- * is derived from the token (never accepted as input), so a token can only ever
- * probe its OWN subscription state — a guest/anonymous token has no account
- * email and therefore is simply "not subscribed" (200, subscribed:false) rather
- * than an error. No information can leak about other shoppers.
+ * Intended for an authoritative/cross-device surface (e.g. an account "my
+ * waitlist" view), NOT the PDP critical path — the PDP uses a local hint. Kept
+ * available because the read is cheap and genuinely useful off the hot path.
+ *
+ * Lenient by design: the email is derived from the token (never accepted as
+ * input), so a token can only ever probe its OWN subscription state — a
+ * guest/anonymous token has no account email and is simply "not subscribed"
+ * (200, subscribed:false) rather than an error. No information can leak about
+ * other shoppers.
  */
 exports.getWaitlistStatus = function () {
     var sku = (request.httpParameterMap.sku.stringValue || '').trim();

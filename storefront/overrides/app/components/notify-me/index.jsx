@@ -27,26 +27,35 @@ import {
  *   - registered                                     → one-tap "Notify me" (no email field)
  *
  * Registered sub-states: checking | idle | sending | done | already | error.
- *   - checking : we ask the server whether this shopper is ALREADY on the list
- *                for this SKU (see status check below) before showing an
- *                actionable button — otherwise a subscribed shopper who
- *                refreshes would see "Notify me" again and could create a
- *                duplicate row.
- *   - already  : subscribed on a PRIOR visit → passive confirmation, no button.
- *   - done     : subscribed just now         → passive confirmation, no button.
+ *   - checking : brief one-tick pre-paint state while we read the LOCAL
+ *                already-subscribed hint (synchronous localStorage, NO network)
+ *                — so a subscribed shopper who refreshes doesn't flash the
+ *                "Notify me" button.
+ *   - already  : subscribed on a PRIOR visit (per the local hint) → passive
+ *                confirmation, no button.
+ *   - done     : subscribed just now → passive confirmation, no button.
+ *
+ * We deliberately do NOT read subscription status from the server on PDP load.
+ * The backend write is idempotent (dedupe on a deterministic sha256(email|sku)
+ * key + query-before-insert), so a re-click is harmless — spending an
+ * authenticated round-trip on the most performance-sensitive page to prevent a
+ * harmless re-click isn't worth the latency (see docs/UI-DESIGN.md LOCKED #4).
  * A POST that returns status "already-subscribed" is treated as success and
- * lands in `already` (idempotent).
+ * lands in `already`. An authoritative/cross-device status read (GET
+ * getWaitlistStatus) exists for an account "my waitlist" view, but is
+ * intentionally kept OFF the PDP critical path.
  *
  * ── LOCAL DEV ─────────────────────────────────────────────────────────────
  * The custom `/custom/waitlist` endpoint only exists on OUR sandbox (zzft-025),
  * not on the shared demo instance this app currently points at, and calling it
  * live needs a usable SLAS client (blocked — see docs/HLD.md §12). So while
  * developing against demo data we run in MOCK_MODE: submit simulates a
- * successful call and persistence is mirrored in localStorage so the
- * "already subscribed after refresh" behaviour is demoable without a backend.
- * Set WAITLIST_LIVE=true at build time once the endpoint is deployed and a real
- * SLAS client is configured; the component then uses the real GET status +
- * POST subscribe calls instead.
+ * successful call. In BOTH modes the "already subscribed after refresh"
+ * behaviour is driven by the local hint in localStorage (written on a
+ * successful submit); the only difference is whether submit hits the real POST
+ * endpoint. Set WAITLIST_LIVE=true at build time once the endpoint is deployed
+ * and a real SLAS client is configured; the component then uses the real POST
+ * subscribe call.
  */
 const SCAPI_PATH = 'custom/waitlist/v1'
 
@@ -55,31 +64,34 @@ const SCAPI_PATH = 'custom/waitlist/v1'
 // so the flag can be toggled per environment/test rather than frozen once.
 const isMockMode = () => typeof process === 'undefined' || process.env.WAITLIST_LIVE !== 'true'
 
-// Base URL for the subscriptions resource. GET (with &sku=) reads status; POST
-// (with an email-free body) creates the subscription.
+// Base URL for the subscriptions resource. POST (with an email-free body)
+// creates the subscription; the server derives the email from the token.
 const subscriptionsUrl = ({shortCode, organizationId, siteId}) =>
     `https://${shortCode}.api.commercecloud.salesforce.com/${SCAPI_PATH}` +
     `/organizations/${organizationId}/subscriptions?siteId=${siteId}`
 
-// ── MOCK persistence ────────────────────────────────────────────────────────
-// In MOCK_MODE there is no backend to remember a signup, so we stand in for the
-// server-side Custom Object with localStorage keyed by account email + SKU.
-// This is ONLY a dev/demo convenience; the live path uses the GET status call.
-const mockStorageKey = (email, sku) => `waitlist:${String(email || '').toLowerCase()}:${sku}`
+// ── Local "already subscribed" hint ──────────────────────────────────────────
+// A client-side breadcrumb (localStorage, keyed by account email + SKU) written
+// on a successful submit and read on mount, so a refresh shows the passive
+// "already on the list" state WITHOUT a network round-trip. It is a UX nicety,
+// NOT the source of truth — the backend dedupes idempotently, so a missing or
+// stale hint just means the shopper sees the one-tap button again and a
+// re-click no-ops server-side. Used in BOTH mock and live modes.
+const subscribedHintKey = (email, sku) => `waitlist:${String(email || '').toLowerCase()}:${sku}`
 
-const readMockSubscribed = (email, sku) => {
+const readSubscribedHint = (email, sku) => {
     if (typeof window === 'undefined' || !window.localStorage) return false
     try {
-        return window.localStorage.getItem(mockStorageKey(email, sku)) === '1'
+        return window.localStorage.getItem(subscribedHintKey(email, sku)) === '1'
     } catch (e) {
         return false
     }
 }
 
-const writeMockSubscribed = (email, sku) => {
+const writeSubscribedHint = (email, sku) => {
     if (typeof window === 'undefined' || !window.localStorage) return
     try {
-        window.localStorage.setItem(mockStorageKey(email, sku), '1')
+        window.localStorage.setItem(subscribedHintKey(email, sku), '1')
     } catch (e) {
         /* storage unavailable (private mode / quota) — non-fatal for a demo */
     }
@@ -87,9 +99,9 @@ const writeMockSubscribed = (email, sku) => {
 
 const NotifyMeForm = ({sku, locale}) => {
     const intl = useIntl()
-    // Registered flow starts in `checking`: we don't render an actionable button
-    // until the status lookup resolves, so a subscribed shopper never sees the
-    // one-tap button after a refresh.
+    // Registered flow starts in `checking`: a one-tick pre-paint state while we
+    // read the LOCAL already-subscribed hint, so a subscribed shopper never
+    // flashes the one-tap button after a refresh. No network is involved.
     const [state, setState] = useState('checking')
     const {getTokenWhenReady} = useAccessToken()
     const api = useCommerceApi()
@@ -113,43 +125,15 @@ const NotifyMeForm = ({sku, locale}) => {
         }
     }, [identityKnown, isRegistered, sku])
 
-    // ── Status check ────────────────────────────────────────────────────────
-    // For a registered shopper, ask the backend whether they're ALREADY on the
-    // list for this SKU before showing anything actionable. Re-runs when the
-    // selected variant (sku) changes. Fails OPEN: if we can't determine status
-    // we fall back to `idle` so the shopper can still subscribe.
+    // ── Already-subscribed hint (client-side, no network) ────────────────────
+    // See the header note: we do NOT read server status on PDP load. Once
+    // identity resolves we read the LOCAL hint synchronously and either show the
+    // passive `already` state or fall through to the one-tap button. Re-runs
+    // when the selected variant (sku) changes.
     useEffect(() => {
-        if (!identityKnown || !isRegistered) return undefined
-        let ignore = false
-        setState('checking')
-
-        const resolveStatus = async () => {
-            if (isMockMode()) return readMockSubscribed(displayEmail, sku)
-            const {shortCode, organizationId, siteId} = api.shopperProducts.clientConfig.parameters
-            const token = await getTokenWhenReady()
-            const url =
-                `${subscriptionsUrl({shortCode, organizationId, siteId})}` +
-                `&sku=${encodeURIComponent(sku)}`
-            const res = await fetch(url, {headers: {Authorization: `Bearer ${token}`}})
-            if (!res.ok) return false
-            const data = await res.json()
-            return Boolean(data && data.subscribed)
-        }
-
-        resolveStatus()
-            .then((subscribed) => {
-                if (!ignore) setState(subscribed ? 'already' : 'idle')
-            })
-            .catch(() => {
-                if (!ignore) setState('idle')
-            })
-
-        return () => {
-            ignore = true
-        }
-        // displayEmail/api/getTokenWhenReady are stable for a given session; we
-        // intentionally re-check only on identity resolution and variant change.
-    }, [identityKnown, isRegistered, sku])
+        if (!identityKnown || !isRegistered) return
+        setState(readSubscribedHint(displayEmail, sku) ? 'already' : 'idle')
+    }, [identityKnown, isRegistered, sku, displayEmail])
 
     const submitLive = async () => {
         // shortCode / organizationId / siteId come from config/default.js.
@@ -190,8 +174,8 @@ const NotifyMeForm = ({sku, locale}) => {
         try {
             const result = isMockMode() ? await submitMock() : await submitLive()
             if (result.ok) {
-                // Persist the mock "subscription" so a refresh lands in `already`.
-                if (isMockMode()) writeMockSubscribed(displayEmail, sku)
+                // Persist the local hint so a refresh lands in `already`.
+                writeSubscribedHint(displayEmail, sku)
                 setState(result.already ? 'already' : 'done')
             } else {
                 setState('error')

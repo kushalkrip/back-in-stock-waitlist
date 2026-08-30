@@ -3,11 +3,12 @@
  *
  * The component has three identity branches (skeleton / guest / registered) and,
  * for the registered branch, sub-states: checking / idle / sending / done /
- * already / error. On mount the registered branch runs a STATUS CHECK (is this
- * shopper already on the list for this SKU?) before showing an actionable
- * button — so most registered assertions await the resolved state rather than
- * reading synchronously. We mock the customer + auth hooks so each branch can be
- * driven deterministically, and render through a minimal Intl + Chakra wrapper.
+ * already / error. On mount the registered branch reads a LOCAL already-
+ * subscribed hint (synchronous localStorage, NO network) before showing an
+ * actionable button — so most registered assertions await the resolved state
+ * rather than reading synchronously. We mock the customer + auth hooks so each
+ * branch can be driven deterministically, and render through a minimal Intl +
+ * Chakra wrapper.
  */
 import React from 'react'
 import '@testing-library/jest-dom'
@@ -117,35 +118,29 @@ describe('NotifyMeForm identity branches', () => {
 })
 
 describe('NotifyMeForm already-subscribed status', () => {
-    test('a shopper already on the list (mock persistence) sees a passive confirmation, no button', async () => {
-        // Pre-seed the mock "subscription" the same way a prior submit would.
+    test('a shopper already on the list (local hint) sees a passive confirmation, no button', async () => {
+        // Pre-seed the local hint the same way a prior successful submit would.
         window.localStorage.setItem('waitlist:shopper@example.com:SKU-1', '1')
         mockUseCurrentCustomer.mockReturnValue(registered())
         const {findByTestId, queryByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
 
         expect(await findByTestId('notify-me-already')).toBeInTheDocument()
-        // No actionable button — the shopper cannot re-subscribe (no duplicate row).
+        // No actionable button — a passive reminder. (Re-clicking would be
+        // harmless anyway: the backend dedupes idempotently.)
         expect(queryByTestId('notify-me-submit')).not.toBeInTheDocument()
     })
 
-    test('live status GET reporting subscribed lands in the already state (no body, sku in query)', async () => {
+    test('the already-subscribed hint is read locally on mount with NO network call (live mode)', async () => {
+        // Even in live mode the PDP must not spend a status round-trip: the
+        // "already on the list" state comes from the local hint, not a GET.
         process.env.WAITLIST_LIVE = 'true' // force the live path
+        window.localStorage.setItem('waitlist:shopper@example.com:SKU-1', '1')
         mockUseCurrentCustomer.mockReturnValue(registered())
-        global.fetch = jest.fn().mockResolvedValue({
-            ok: true,
-            json: jest.fn().mockResolvedValue({subscribed: true, sku: 'SKU-1'})
-        })
+        global.fetch = jest.fn() // must never be called on mount
 
         const {findByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         expect(await findByTestId('notify-me-already')).toBeInTheDocument()
-
-        // The status check is a GET with the sku in the query string and no body.
-        expect(global.fetch).toHaveBeenCalledTimes(1)
-        const [url, opts] = global.fetch.mock.calls[0]
-        expect(url).toContain('sku=SKU-1')
-        // No method === defaults to GET; and definitely no request body.
-        expect(opts.method).toBeUndefined()
-        expect(opts.body).toBeUndefined()
+        expect(global.fetch).not.toHaveBeenCalled()
     })
 })
 
@@ -164,14 +159,9 @@ describe('NotifyMeForm submit states', () => {
     test('a failed live submit surfaces an accessible error', async () => {
         process.env.WAITLIST_LIVE = 'true' // force the live path
         mockUseCurrentCustomer.mockReturnValue(registered())
-        // First fetch = status check (not subscribed); second = the failing POST.
-        global.fetch = jest
-            .fn()
-            .mockResolvedValueOnce({
-                ok: true,
-                json: jest.fn().mockResolvedValue({subscribed: false})
-            })
-            .mockResolvedValueOnce({ok: false})
+        // No status GET on mount (empty hint -> idle); the only fetch is the
+        // failing POST triggered by the click.
+        global.fetch = jest.fn().mockResolvedValueOnce({ok: false})
 
         const {findByTestId, getByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         fireEvent.click(await findByTestId('notify-me-submit'))
@@ -185,8 +175,10 @@ describe('NotifyMeForm submit states', () => {
                 'notify-me-error'
             )
         )
-        // The POST payload must NOT contain an email (server derives it).
-        const postCall = global.fetch.mock.calls[1]
+        // The one and only call is the POST; its payload must NOT contain an
+        // email (server derives it from the token).
+        expect(global.fetch).toHaveBeenCalledTimes(1)
+        const postCall = global.fetch.mock.calls[0]
         expect(postCall[1].method).toBe('POST')
         const body = JSON.parse(postCall[1].body)
         expect(body).toEqual({sku: 'SKU-1', locale: 'en-US'})

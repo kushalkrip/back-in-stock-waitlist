@@ -56,23 +56,14 @@ text below (esp. §7, §8, §12) hedges, **these decisions win:**
 5. **Build ALL of the following now (not deferred to future work):**
    - **TTL/cleanup job step** (closes §8/§9/§12 gap #2 + doubles as the
      PII-retention control).
-   - **Already-subscribed detection — mount-time status check** (revised
-     2026-08-30, reversing the earlier "response-driven, no GET" call — see note
-     below). Two complementary mechanisms: (a) the PDP performs a **`GET
-     .../subscriptions?sku=…` status check on load** so an already-subscribed
-     shopper who returns/refreshes sees a passive "you're already on the list"
-     state instead of a re-submittable button (the original bug: submit state was
-     in-memory only, so a refresh re-showed the actionable button and invited a
-     duplicate row); (b) the POST response still returns a distinguishable
-     `already-subscribed` status on a dedupe hit, so a race between two tabs
-     still resolves to the same passive state. The `GET` derives the email from
-     the token (never accepts it as input), so a shopper can only probe their own
-     status. **Reversal rationale & tradeoff:** the earlier decision avoided the
-     extra round-trip, but "response-driven only" cannot survive a page reload
-     (no request has been made yet on a fresh load), which is exactly the reported
-     defect. The cost is one lightweight `GET` per PDP load for an OOS variant of
-     a registered shopper — acceptable for correct, non-duplicating UX. See §12
-     gap #7 / UI-DESIGN §5.4.
+   - **Already-subscribed detection** — the custom SCAPI POST response returns a
+     distinguishable `already-subscribed` status on a dedupe hit, and the PWA
+     renders the distinct idempotent state (§12 gap #7 / UI-DESIGN §5.4). Across
+     a refresh the PWA reads a zero-latency `localStorage` hint on mount — **not**
+     a per-view server read; the write is idempotent so a re-click is harmless.
+     A `getWaitlistStatus` GET endpoint exists for an authoritative/cross-device
+     account view but is kept OFF the PDP critical path (see the decision-history
+     note in UI-DESIGN §5.4, reverted 2026-08-30).
    - **Shared subscribe module** — factor the duplicated validate/key/transaction
      logic out of `rest-apis/waitlist/script.js` and `controllers/WaitList.js`
      into one `scripts/` include both call (closes §12 gap #6).
@@ -428,22 +419,19 @@ produces a second row under the new address, which is the correct behavior. See 
   must be non-empty. This is a net *reduction* in trusted-input surface versus
   the earlier design.
 
-#### Status check (added 2026-08-30)
-
-- **Method / path:** `GET /custom/waitlist/v1/organizations/{organizationId}/subscriptions?siteId={siteId}&sku={sku}`
-  (`operationId: getWaitlistStatus`, `exports.getWaitlistStatus.public = true`).
-- **Purpose:** the PDP calls this on load so an already-subscribed shopper sees a
-  passive "you're already on the list" state instead of a re-submittable button
-  (fixes the reload-shows-button defect — see §1 decision #5).
-- **Response** (`SubscriptionStatusResponse`): `{ "subscribed": true|false, "sku": "…" }`.
-- **Auth / privacy:** same `ShopperToken`. The email is derived from the token,
-  **never accepted as input**, so a caller can only ever query *their own*
-  subscription state — no way to probe whether a stranger is on a list.
-  **Lenient (fail-open):** a guest/anonymous token has no account email, so the
-  handler returns `200 { subscribed: false }` rather than a `401` — the check is
-  a benign read the client performs on mount, not a mutation.
-- **Status codes:** `200` (status returned), `400` (`invalid-sku` when `sku` is
-  missing/empty). No `401` — see fail-open note above.
+- **Status read (`GET`, off the PDP critical path).** A companion
+  `getWaitlistStatus` operation —
+  `GET .../subscriptions?siteId=...&sku=<sku>` returning
+  `{ "subscribed": bool, "sku": ... }` — reports whether the *authenticated
+  caller* is on the list for a SKU. The email is derived from the token (never
+  input), so a token can only ever probe its own state and a guest token is
+  simply `subscribed:false` (fail-open 200). **The PDP does not call this on
+  load:** the write is idempotent, so re-clicks are harmless and a per-view
+  authenticated round-trip on the storefront's hottest page isn't worth the
+  latency; the PWA uses a zero-latency `localStorage` hint for the
+  refresh-survives-subscription UX instead. The endpoint is retained for an
+  authoritative/cross-device account "my waitlist" view. (Decision history:
+  a mount-time GET was tried and reverted — UI-DESIGN §5.4, 2026-08-30.)
 
 ### SFRA controller parity (no-SLAS doorway)
 
@@ -467,11 +455,6 @@ produces a second row under the new address, which is the correct behavior. See 
   query-before-insert. Response is `res.json({success, status})` rather than a
   REST envelope, but the `status` values (`subscribed` / `already-subscribed`)
   match the SCAPI contract 1:1.
-- **Status parity route (added 2026-08-30):** `WaitList-Status`
-  (`server.get('Status', server.middleware.https, userLoggedIn.validateLoggedInAjax, …)`)
-  mirrors the SCAPI `getWaitlistStatus` — login-required, email from the session,
-  `sku` from `req.querystring.sku`, returns `res.json({subscribed})`. Same
-  fail-open behaviour on a missing profile email.
 - **This is the proof that SLAS is a transport-layer concern, not a
   business-logic dependency:** both doorways call into the same shape of
   logic (currently duplicated between the two files rather than factored into
@@ -688,7 +671,7 @@ stateDiagram-v2
 | Logged-in (registered) shopper | The only write path. Request body is `{sku, locale}` with **no email** — the endpoint reads the authenticated customer (`request.getSession().getCustomer()`), rejects if `!authenticated \|\| !registered`, and derives `email = customer.getProfile().getEmail()` server-side. The row is therefore always keyed on a verified account address, never a client-supplied string. |
 | Requested qty exceeds available stock (e.g. 5 in stock, shopper asks for 6) | This is an **Add-to-Cart-time / quantity-picker-time** orderability check (`validateOrderability`: `quantity <= stockLevel`), not a waitlist-time concern — the SKU is still nominally in stock. The waitlist swap in `product-view/index.jsx` triggers off `isOutOfStock` (i.e., `orderable === false` for the resolved selection), not off "requested quantity > stockLevel." **Design intent:** this over-quantity case should surface an inline inventory message (`showInventoryMessage`/`inventoryMessage`, already wired in `useDerivedProduct`) and cap/disable Add-to-Cart at `stockLevel`, and must **not** simultaneously offer "Notify Me" for a SKU that is still genuinely orderable at a lower quantity. **Resolved (see DECISIONS LOCKED #1): partial stock is not a Notify-Me case** — the split buy box was cut as over-engineering; Notify Me shows only when fully OOS. |
 | Variant vs. master | Waitlist is **always** variant-scoped. The PDP only offers Notify Me once `variantResolved` is true (`Boolean(variant?.productId) || !hasVariations`) — for a variation product with no selection made yet, no SKU is sent because none is known. The job resolves inventory via `ProductMgr.getProduct(sku).getAvailabilityModel()` on that same variant ID, never the master. |
-| Already subscribed | Resubmitting for the same `(server-derived email, sku)` returns HTTP `200` / `status: already-subscribed` — the form treats this as success-equivalent (`res.ok` check in `submitLive()` doesn't even need to branch on the status string, though a future UI refinement could distinguish the copy — see `docs/UI-DESIGN.md`). |
+| Already subscribed | Resubmitting for the same `(server-derived email, sku)` returns HTTP `200` / `status: already-subscribed` — the form treats this as success-equivalent. `submitLive()` returns `{ok, already}` so the "already on the list" copy is shown on a dedupe hit, and on mount a `localStorage` hint renders that same state across a refresh without any server read (see `docs/UI-DESIGN.md` §5.4). |
 
 ---
 
@@ -1056,7 +1039,7 @@ case list and commands.
 | Tier | Tooling | Target | What it proves |
 |---|---|---|---|
 | **Cartridge unit** | `mocha` + `sinon` + `proxyquire` (mocking `dw/*`) | `waitlistKey.js`, `rest-apis/waitlist/script.js` (`joinWaitlist`), `scripts/steps/notifyWaitlist.js`, `scripts/services/waitlistNotifyService.js` | Business logic in isolation: hash determinism/collision-safety; validation + dedupe branch; the job's `PENDING→NOTIFIED/FAILED` transitions and the "leave PENDING on transient failure" branch; service `createRequest`/`parseResponse`/`mockCall`. This is where the resilience edge cases (§8) get direct coverage. |
-| **PWA component** | **Jest** + React Testing Library (`pwa-kit-dev test`, already wired as `npm test`) | `overrides/app/components/notify-me/index.jsx`, `overrides/app/components/product-view/index.jsx` | The UI state machine (§7 / UI-DESIGN): idle→sending→done, idle→sending→error, already-subscribed branch, empty/invalid-email guard, and the Add-to-Cart↔Notify-Me swap under in-stock vs OOS props. `submitLive` tested with a mocked `fetch`; `MOCK_MODE` otherwise. |
+| **PWA component** | **Jest** + React Testing Library (`pwa-kit-dev test`, already wired as `npm test`) | `overrides/app/components/notify-me/index.jsx`, `overrides/app/components/product-view/index.jsx` | The UI state machine (§7 / UI-DESIGN): checking→idle→sending→done, idle→sending→error, the already-subscribed branch (from a pre-seeded `localStorage` hint on mount AND from an idempotent POST), the skeleton/guest/registered identity branches, and the Add-to-Cart↔Notify-Me swap under in-stock vs OOS props. `submitLive` and the "no status GET on mount" guarantee are tested with a mocked `fetch`; `MOCK_MODE` otherwise. |
 | **E2E (optional)** | **Playwright** | Local `npm start` server | One happy-path spec: PDP with `?forceOOS=1` → Notify-Me renders → fill email → submit → success state. Breadth-proof over the full render/route stack; depth stays in the Jest suite. If time-boxed out, the README states so and notes Jest carries the behavioural coverage. |
 
 **Why this split:** the highest-value, edge-case-dense logic (idempotency, job transitions,
