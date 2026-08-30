@@ -75,7 +75,7 @@ beforeEach(() => {
 describe('NotifyMeForm identity branches', () => {
     test('renders a skeleton while the session identity is still unknown', () => {
         mockUseCurrentCustomer.mockReturnValue(bootstrapping())
-        const {getByTestId, queryByTestId} = renderNotify({sku: "SKU-1", locale: "en-US"})
+        const {getByTestId, queryByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         expect(getByTestId('notify-me-skeleton')).toBeInTheDocument()
         // Must never flash the guest or registered branch before identity resolves.
         expect(queryByTestId('notify-me-guest')).not.toBeInTheDocument()
@@ -84,7 +84,7 @@ describe('NotifyMeForm identity branches', () => {
 
     test('guest sees a sign-in prompt and no email input', () => {
         mockUseCurrentCustomer.mockReturnValue(guest())
-        const {getByTestId, queryByRole} = renderNotify({sku: "SKU-1", locale: "en-US"})
+        const {getByTestId, queryByRole} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         expect(getByTestId('notify-me-guest')).toBeInTheDocument()
         expect(getByTestId('notify-me-signin')).toBeInTheDocument()
         // Registered-only design: there is no email text input anywhere.
@@ -93,14 +93,14 @@ describe('NotifyMeForm identity branches', () => {
 
     test('clicking the guest sign-in button opens the auth modal', () => {
         mockUseCurrentCustomer.mockReturnValue(guest())
-        const {getByTestId} = renderNotify({sku: "SKU-1", locale: "en-US"})
+        const {getByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         fireEvent.click(getByTestId('notify-me-signin'))
         expect(mockOnOpen).toHaveBeenCalledTimes(1)
     })
 
     test('registered shopper sees one-tap submit and their account email, no input', () => {
         mockUseCurrentCustomer.mockReturnValue(registered('kushal@example.com'))
-        const {getByTestId, queryByRole} = renderNotify({sku: "SKU-1", locale: "en-US"})
+        const {getByTestId, queryByRole} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         expect(getByTestId('notify-me-registered')).toBeInTheDocument()
         expect(getByTestId('notify-me-submit')).toBeInTheDocument()
         expect(getByTestId('notify-me-silent-notice')).toHaveTextContent('kushal@example.com')
@@ -111,7 +111,7 @@ describe('NotifyMeForm identity branches', () => {
 describe('NotifyMeForm submit states', () => {
     test('successful (mock) submit transitions to the confirmation state', async () => {
         mockUseCurrentCustomer.mockReturnValue(registered())
-        const {getByTestId, findByTestId} = renderNotify({sku: "SKU-1", locale: "en-US"})
+        const {getByTestId, findByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         fireEvent.click(getByTestId('notify-me-submit'))
         // submitMock resolves true after a short delay -> done branch.
         expect(await findByTestId('notify-me-done', {}, {timeout: 3000})).toBeInTheDocument()
@@ -122,7 +122,7 @@ describe('NotifyMeForm submit states', () => {
         mockUseCurrentCustomer.mockReturnValue(registered())
         global.fetch = jest.fn().mockResolvedValue({ok: false})
 
-        const {getByTestId, findByTestId} = renderNotify({sku: "SKU-1", locale: "en-US"})
+        const {getByTestId, findByTestId} = renderNotify({sku: 'SKU-1', locale: 'en-US'})
         fireEvent.click(getByTestId('notify-me-submit'))
 
         const error = await findByTestId('notify-me-error', {}, {timeout: 3000})

@@ -64,7 +64,6 @@ const NotifyMeForm = ({sku, locale}) => {
     // analytics dependency into a take-home.
     useEffect(() => {
         if (identityKnown && !isRegistered) {
-            // eslint-disable-next-line no-console
             console.info('[NotifyMe] notify_me_login_prompt_shown', {sku})
         }
     }, [identityKnown, isRegistered, sku])
@@ -92,7 +91,6 @@ const NotifyMeForm = ({sku, locale}) => {
     // sending -> done transition is exercised exactly as in production.
     const submitMock = () =>
         new Promise((resolve) => {
-            // eslint-disable-next-line no-console
             console.info('[NotifyMe:mock] would POST', {sku, locale})
             setTimeout(() => resolve(true), 700)
         })
@@ -156,7 +154,6 @@ const NotifyMeForm = ({sku, locale}) => {
                         data-testid="notify-me-signin"
                         width="100%"
                         onClick={() => {
-                            // eslint-disable-next-line no-console
                             console.info('[NotifyMe] notify_me_login_prompt_signin_clicked', {sku})
                             authModal.onOpen()
                         }}
@@ -226,8 +223,7 @@ const NotifyMeForm = ({sku, locale}) => {
                     {displayEmail
                         ? intl.formatMessage(
                               {
-                                  defaultMessage:
-                                      'We’ll email {email} when this is back in stock.',
+                                  defaultMessage: 'We’ll email {email} when this is back in stock.',
                                   id: 'notify_me.silent_email_notice'
                               },
                               {email: displayEmail}
@@ -251,7 +247,12 @@ const NotifyMeForm = ({sku, locale}) => {
                     })}
                 </Button>
                 {state === 'error' && (
-                    <Text id="notify-me-error" data-testid="notify-me-error" color="red.500" fontSize="sm">
+                    <Text
+                        id="notify-me-error"
+                        data-testid="notify-me-error"
+                        color="red.500"
+                        fontSize="sm"
+                    >
                         {intl.formatMessage({
                             defaultMessage: 'Something went wrong. Please try again.',
                             id: 'notify_me.error'
