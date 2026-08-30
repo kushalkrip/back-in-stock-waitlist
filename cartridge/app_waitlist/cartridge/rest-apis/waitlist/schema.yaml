@@ -16,6 +16,41 @@ servers:
         default: your-short-code
 paths:
   /organizations/{organizationId}/subscriptions:
+    get:
+      summary: Whether the authenticated shopper is already on the waitlist for a SKU
+      description: >
+        Read-only status check used by the PDP on load. The subscriber email is
+        derived from the token, so a shopper can only ever query their OWN
+        status; a guest token yields subscribed:false rather than an error.
+      operationId: getWaitlistStatus
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: siteId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: sku
+          in: query
+          required: true
+          description: The selected VARIANT product ID to check.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subscription status for this shopper + SKU
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionStatusResponse'
+        '400':
+          description: Invalid input (invalid-sku)
+      security:
+        - ShopperToken: []
     post:
       summary: Join the back-in-stock waitlist for a SKU
       operationId: joinWaitlist
@@ -77,5 +112,13 @@ components:
         status:
           type: string
           enum: [subscribed, already-subscribed]
+        sku:
+          type: string
+    SubscriptionStatusResponse:
+      type: object
+      properties:
+        subscribed:
+          type: boolean
+          description: True if this shopper already has a subscription for the SKU.
         sku:
           type: string

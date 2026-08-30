@@ -12,7 +12,9 @@
  * authenticated session (`req.currentCustomer.profile.email`), NEVER from the
  * request body. Only sku/locale are read from the form.
  *
- * Route: WaitList-Subscribe (POST)
+ * Routes:
+ *   WaitList-Subscribe (POST) — create the subscription
+ *   WaitList-Status    (GET)  — is this shopper already subscribed for a SKU?
  */
 
 var server = require('server');
@@ -68,6 +70,36 @@ server.post(
         });
 
         res.json({success: true, status: alreadySubscribed ? 'already-subscribed' : 'subscribed'});
+        return next();
+    }
+);
+
+// Status check consumed by the PDP on load so an already-subscribed shopper
+// sees a passive confirmation instead of a re-submittable button.
+server.get(
+    'Status',
+    server.middleware.https,
+    userLoggedIn.validateLoggedInAjax,
+    function (req, res, next) {
+        var email = ((req.currentCustomer.profile && req.currentCustomer.profile.email) || '')
+            .trim()
+            .toLowerCase();
+        var sku = (req.querystring.sku || '').trim();
+
+        if (!sku) {
+            res.setStatusCode(400);
+            res.json({success: false, error: 'invalid-sku'});
+            return next();
+        }
+        // Logged-in route, but fail open if the profile somehow has no email.
+        if (!email) {
+            res.json({subscribed: false});
+            return next();
+        }
+
+        var key = require('*/cartridge/scripts/util/waitlistKey').make(email, sku);
+        var existing = CustomObjectMgr.getCustomObject(OBJECT_TYPE, key);
+        res.json({subscribed: !!existing});
         return next();
     }
 );

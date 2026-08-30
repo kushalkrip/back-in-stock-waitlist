@@ -20,12 +20,16 @@ periodically checks **variant-level** inventory and, on replenishment, calls an
 Shopper (PWA Kit PDP, React)  — REGISTERED USERS ONLY
   variant.orderable === false  ->  render <NotifyMeForm sku=selectedVariantId>
         guest  -> "Sign in to be notified" prompt (opens AuthModal)
-        registered -> one-tap "Notify me" (no email field)
-        │  POST {sku, locale}   (SLAS registered token; NO email in body)
+        registered -> GET status on mount:
+                        subscribed  -> passive "already on the list" (no button)
+                        not subscribed -> one-tap "Notify me" (no email field)
+        │  GET  {sku}          (mount-time status check; email from token)
+        │  POST {sku, locale}  (SLAS registered token; NO email in body)
         ▼
-Custom SCAPI endpoint  POST /custom/waitlist/v1/organizations/{orgId}/subscriptions
-  reject guest token (401) -> email = session customer profile email
-  -> query-before-insert dedupe -> Transaction.wrap(createCustomObject)
+Custom SCAPI endpoint  /custom/waitlist/v1/organizations/{orgId}/subscriptions
+  GET  ?sku=..  reject nothing (fail-open) -> {subscribed:bool}   (getWaitlistStatus)
+  POST          reject guest token (401) -> email = session customer profile email
+                -> query-before-insert dedupe -> Transaction.wrap(createCustomObject)
         ▼
 Custom Object  WaitlistSubscription  (key = sha256(email|sku))
   email(server-derived), productID(VARIANT SKU),
@@ -48,7 +52,7 @@ Outbound Service  waitlist.http.notify  (timeout + circuit breaker + rate limit)
 app_waitlist/                         # the cartridge (add to the site cartridge path)
   cartridge/
     rest-apis/waitlist/               # Custom SCAPI endpoint
-      schema.yaml  api.json  script.js  (exports.joinWaitlist)
+      schema.yaml  api.json  script.js  (exports.joinWaitlist + getWaitlistStatus)
     scripts/
       steps/notifyWaitlist.js         # chunk job (beforeStep/read/process/write/afterStep)
       services/waitlistNotifyService.js

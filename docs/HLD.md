@@ -56,10 +56,23 @@ text below (esp. §7, §8, §12) hedges, **these decisions win:**
 5. **Build ALL of the following now (not deferred to future work):**
    - **TTL/cleanup job step** (closes §8/§9/§12 gap #2 + doubles as the
      PII-retention control).
-   - **Already-subscribed detection** — the custom SCAPI POST response returns a
-     distinguishable `already-subscribed` status on a dedupe hit, and the PWA
-     renders the distinct idempotent state (§12 gap #7 / UI-DESIGN §5.4). No
-     second round-trip / no separate GET.
+   - **Already-subscribed detection — mount-time status check** (revised
+     2026-08-30, reversing the earlier "response-driven, no GET" call — see note
+     below). Two complementary mechanisms: (a) the PDP performs a **`GET
+     .../subscriptions?sku=…` status check on load** so an already-subscribed
+     shopper who returns/refreshes sees a passive "you're already on the list"
+     state instead of a re-submittable button (the original bug: submit state was
+     in-memory only, so a refresh re-showed the actionable button and invited a
+     duplicate row); (b) the POST response still returns a distinguishable
+     `already-subscribed` status on a dedupe hit, so a race between two tabs
+     still resolves to the same passive state. The `GET` derives the email from
+     the token (never accepts it as input), so a shopper can only probe their own
+     status. **Reversal rationale & tradeoff:** the earlier decision avoided the
+     extra round-trip, but "response-driven only" cannot survive a page reload
+     (no request has been made yet on a fresh load), which is exactly the reported
+     defect. The cost is one lightweight `GET` per PDP load for an OOS variant of
+     a registered shopper — acceptable for correct, non-duplicating UX. See §12
+     gap #7 / UI-DESIGN §5.4.
    - **Shared subscribe module** — factor the duplicated validate/key/transaction
      logic out of `rest-apis/waitlist/script.js` and `controllers/WaitList.js`
      into one `scripts/` include both call (closes §12 gap #6).
@@ -415,6 +428,23 @@ produces a second row under the new address, which is the correct behavior. See 
   must be non-empty. This is a net *reduction* in trusted-input surface versus
   the earlier design.
 
+#### Status check (added 2026-08-30)
+
+- **Method / path:** `GET /custom/waitlist/v1/organizations/{organizationId}/subscriptions?siteId={siteId}&sku={sku}`
+  (`operationId: getWaitlistStatus`, `exports.getWaitlistStatus.public = true`).
+- **Purpose:** the PDP calls this on load so an already-subscribed shopper sees a
+  passive "you're already on the list" state instead of a re-submittable button
+  (fixes the reload-shows-button defect — see §1 decision #5).
+- **Response** (`SubscriptionStatusResponse`): `{ "subscribed": true|false, "sku": "…" }`.
+- **Auth / privacy:** same `ShopperToken`. The email is derived from the token,
+  **never accepted as input**, so a caller can only ever query *their own*
+  subscription state — no way to probe whether a stranger is on a list.
+  **Lenient (fail-open):** a guest/anonymous token has no account email, so the
+  handler returns `200 { subscribed: false }` rather than a `401` — the check is
+  a benign read the client performs on mount, not a mutation.
+- **Status codes:** `200` (status returned), `400` (`invalid-sku` when `sku` is
+  missing/empty). No `401` — see fail-open note above.
+
 ### SFRA controller parity (no-SLAS doorway)
 
 - **Route:** `WaitList-Subscribe` (`server.post('Subscribe', server.middleware.https,
@@ -437,6 +467,11 @@ produces a second row under the new address, which is the correct behavior. See 
   query-before-insert. Response is `res.json({success, status})` rather than a
   REST envelope, but the `status` values (`subscribed` / `already-subscribed`)
   match the SCAPI contract 1:1.
+- **Status parity route (added 2026-08-30):** `WaitList-Status`
+  (`server.get('Status', server.middleware.https, userLoggedIn.validateLoggedInAjax, …)`)
+  mirrors the SCAPI `getWaitlistStatus` — login-required, email from the session,
+  `sku` from `req.querystring.sku`, returns `res.json({subscribed})`. Same
+  fail-open behaviour on a missing profile email.
 - **This is the proof that SLAS is a transport-layer concern, not a
   business-logic dependency:** both doorways call into the same shape of
   logic (currently duplicated between the two files rather than factored into

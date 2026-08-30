@@ -6,6 +6,12 @@
  * POST /custom/waitlist/v1/organizations/{organizationId}/subscriptions?siteId=...
  * Body: { "sku": "variant-sku", "locale": "en_US" }   <-- NO email
  *
+ * GET  /custom/waitlist/v1/organizations/{organizationId}/subscriptions?siteId=...&sku=variant-sku
+ * Returns { "subscribed": bool, "sku": "variant-sku" } so the PDP can render a
+ * passive "you're already on the list" state (instead of an actionable button)
+ * on load — otherwise a subscribed shopper who refreshes could create a
+ * duplicate row.
+ *
  * REGISTERED-USERS-ONLY (see docs/HLD.md DECISIONS LOCKED #2). The email is
  * NEVER accepted from the request body; it is derived server-side from the
  * authenticated shopper's profile. A guest token is rejected with 401. This
@@ -101,3 +107,37 @@ exports.joinWaitlist = function () {
 // Expose the operation on the shopper (SLAS-authenticated) surface. The handler
 // itself enforces the registered-only rule above.
 exports.joinWaitlist.public = true;
+
+/**
+ * Report whether the authenticated shopper is already on the waitlist for a SKU.
+ *
+ * Lenient by design: this is a benign read the PDP performs on mount. The email
+ * is derived from the token (never accepted as input), so a token can only ever
+ * probe its OWN subscription state — a guest/anonymous token has no account
+ * email and therefore is simply "not subscribed" (200, subscribed:false) rather
+ * than an error. No information can leak about other shoppers.
+ */
+exports.getWaitlistStatus = function () {
+    var sku = (request.httpParameterMap.sku.stringValue || '').trim();
+    if (!sku) {
+        RESTResponseMgr.createError(400, 'invalid-sku', 'A product SKU is required').render();
+        return;
+    }
+
+    var customer = request.session && request.session.customer;
+    var email = '';
+    if (customer && customer.authenticated && customer.registered && customer.profile) {
+        email = (customer.profile.email || '').trim().toLowerCase();
+    }
+
+    // No authenticated account email -> cannot be subscribed. Fail open (200).
+    if (!email) {
+        RESTResponseMgr.createSuccess({subscribed: false, sku: sku}).render();
+        return;
+    }
+
+    var key = require('*/cartridge/scripts/util/waitlistKey').make(email, sku);
+    var existing = CustomObjectMgr.getCustomObject(OBJECT_TYPE, key);
+    RESTResponseMgr.createSuccess({subscribed: !!existing, sku: sku}).render();
+};
+exports.getWaitlistStatus.public = true;

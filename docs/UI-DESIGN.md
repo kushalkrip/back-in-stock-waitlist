@@ -25,9 +25,16 @@ copy, and component boundaries for review. No production component in
 >    "split buy box / shortfall notice" idea was **cut as over-engineering** (2026-08-30):
 >    it is not a mainstream B2C pattern — the "want more than exists" case is a B2B
 >    *backorder* convention, not a consumer waitlist. (§4)
-> 4. **Already-subscribed is detected from the POST response, NOT a mount-time pre-check.**
->    No separate GET/existence endpoint; the idempotent POST returns a distinguishable
->    status and the client renders the "already on the list" state from it. (§5.4, §6.3)
+> 4. **Already-subscribed is detected by a mount-time GET status check** (REVISED
+>    2026-08-30 — this reverses the earlier "response-driven, no GET" call). On load
+>    the PDP calls `GET .../subscriptions?sku=…`; if `subscribed:true` it renders a
+>    passive "already on the list" state with no submit button. The idempotent POST
+>    still returns a distinguishable `already-subscribed` status, so a two-tab race
+>    also resolves to that state. **Why reversed:** response-driven detection cannot
+>    survive a page reload (no request has been made yet on a fresh load), so a
+>    subscribed shopper who refreshed saw the actionable button again and could
+>    create a duplicate — the reported defect. Cost: one lightweight GET per PDP
+>    load of an OOS variant for a registered shopper. (§5.4, §6.3)
 
 Grounded against the actual code in this repo:
 - `overrides/app/components/notify-me/index.jsx` (current `NotifyMeForm`)
@@ -148,11 +155,11 @@ Axes:
 | 1 | any | `no-variant` | n/a | **Disabled Add-to-Cart** + "Please select all your options above" (existing `showOptionsMessage`) | No SKU to bind Notify Me to; unchanged from today. Do not show Notify Me. |
 | 2 | any | resolved | `FULL` | **Add-to-Cart** (enabled) | Baseline path, unchanged. |
 | 3 | `unknown` | resolved | `OOS` | **Add-to-Cart button in disabled/skeleton state** (neither one-tap nor login prompt yet) | Avoid flashing "guest" copy then "registered" copy. Treat like `showLoading`. |
-| 4 | `registered` | resolved | `OOS` | **Notify Me — one-tap, no email field** (§3.1) | Email is server-derived from the token; the client sends no address. |
+| 4 | `registered` | resolved | `OOS` | **Mount-time GET status check** → if not subscribed: **Notify Me one-tap, no email field** (§3.1); if already subscribed: passive "already on the list" (row #8). A skeleton shows while the check is in flight. | Email is server-derived from the token; the client sends no address. |
 | 5 | `guest` | resolved | `OOS` | **"Sign in to be notified" login prompt** (§3.2) — CTA opens `AuthModal`; on login success the form becomes row #4 | Registered-users-only feature (LOCKED #2). No guest email entry. |
 | 6 | `registered` | resolved | `PARTIAL` | **Add-to-Cart only** — base app behavior (inline "Only N left" message, qty capped to `stockLevel`). **No Notify Me.** | §4. Partial stock is not a waitlist case (LOCKED decision #3). |
 | 7 | `guest` | resolved | `PARTIAL` | **Add-to-Cart only** — same as #6. **No Notify Me.** | §4. |
-| 8 | any | resolved, already subscribed for this sku+email | `OOS` or `PARTIAL` | **Notify Me form submits normally; the idempotent POST response flips it into the "already on the list" state** | Response-driven, NOT a mount-time pre-check (LOCKED decision #4). See §5.4/§6.3/§9. |
+| 8 | `registered` | resolved, already subscribed for this sku+email | `OOS` | **Passive "already on the list" state — no submit button** (§5.4). Entered directly on mount when the GET status check returns `subscribed:true`; also reached if the idempotent POST returns `already-subscribed` (two-tab race). | Mount-time GET status check (LOCKED decision #4, REVISED 2026-08-30). See §5.4/§6.3. |
 | 9 | any | resolved | `OOS`, product is a Set or Bundle | **No Notify Me.** Keep current behavior: sets/bundles never show Notify Me (`!isProductASet && !isProductABundle` guard already in `product-view.jsx`) | Out of scope — bundle-of-bundles back-in-stock is a separate spec. |
 | 10 | any | resolved | `OOS`, child-of-bundle | **Nothing rendered** (bundle children have no CTA row at all today — `!isProductPartOfBundle` guard) | Unchanged. |
 | 11 | any (`forceOOS=1` query param) | resolved | any | **Notify Me forced on**, dev/demo override | Preserves the existing `forceOOS` debug hook in `product-view.jsx`; keep it, but it should force the *matrix row for the real customer type*, not a hardcoded guest view. |
@@ -290,13 +297,23 @@ this feature adds nothing to the partial branch.
 ## 5. State model (per NotifyMeForm instance, keyed by sku)
 
 ```
-idle → sending → done
-         ↓         ↑
-       error ───────┘ (retry re-enters sending)
-
-Additional terminal-ish state, entered directly on mount (no transition through idle):
-already-subscribed
+checking → idle → sending → done
+   │         ↓        ↑
+   │       error ──────┘ (retry re-enters sending)
+   └──────→ already-subscribed   (mount-time GET status check says subscribed)
+                    ↑
+            done path also enters here if POST returns already-subscribed
 ```
+
+### 5.0 checking (registered only, on mount)
+The registered branch starts in `checking` while the mount-time `GET
+.../subscriptions?sku=…` status lookup is in flight, and renders a skeleton — we
+never flash the actionable "Notify me" button before we know whether the shopper
+is already subscribed (otherwise a reload could invite a duplicate signup, the
+reported defect). Resolves to `already-subscribed` (`subscribed:true`) or `idle`
+(`subscribed:false`); on lookup failure it **fails open to `idle`** so the shopper
+can still subscribe. Under `MOCK_MODE` the check reads a localStorage stand-in for
+the Custom Object. Guests skip this entirely (they can't be subscribed).
 
 ### 5.1 idle
 Default render per customer-type variant (§3). For a registered shopper the "Notify Me"
@@ -320,19 +337,23 @@ Softer tone ("you're already on the list" rather than "you're on the list now"),
 container as `done` so there's no jarring layout shift, but copy makes it clear no duplicate
 signup happened.
 
-**Detection is response-driven, NOT a mount-time pre-check (LOCKED decision #4).** We do
-*not* query the backend on mount to ask "is this already subscribed?" — that would need
-a separate GET/existence endpoint (extra surface, extra round-trip) and a mount-time lookup
-is an unnecessary read on every OOS PDP view. Instead the shopper always submits, and the
-idempotent POST tells us which happened:
+**Detection is a mount-time GET status check (LOCKED decision #4, REVISED 2026-08-30).**
+This reverses the earlier "response-driven only, no GET" call. Two entry points now feed
+this state:
 
-- **`created`** (HTTP 201) → `done`
-- **`already-subscribed`** (HTTP 200) → `already-subscribed`
+- **On mount:** the `GET .../subscriptions?sku=…` status check returns `subscribed:true`
+  → the form renders `already-subscribed` directly, with **no submit button**. This is the
+  case that fixes the reported defect (a reload no longer re-shows an actionable button).
+- **On submit (race):** the idempotent POST returns `already-subscribed` → the form flips
+  from `sending` into `already-subscribed` (`submitLive()` reads the parsed body and returns
+  `{ok, already}`; `submitMock()` returns `already:false`).
 
-This requires the endpoint to return a distinguishable body/status (see §9 and the HLD API
-section — `submitLive()` must be upgraded from `return res.ok` to read the parsed body and
-return a tri-state). Under `MOCK_MODE`, `submitMock()` can randomly/deterministically return
-the `already-subscribed` branch to demo this state without a live backend.
+**Why the reversal:** response-driven detection alone cannot survive a page reload — no
+request has been made yet on a fresh load, so a subscribed shopper saw the actionable button
+again. The cost of the fix is one lightweight GET per PDP load of an OOS variant for a
+registered shopper, which is an acceptable price for non-duplicating UX. Under `MOCK_MODE`
+the status check (and the submit's persistence) use a localStorage stand-in for the Custom
+Object, so the "already subscribed after refresh" behaviour is demoable without a backend.
 
 ### 5.5 error / retry
 Inline error text below the button (as today), button reverts to enabled non-loading state,

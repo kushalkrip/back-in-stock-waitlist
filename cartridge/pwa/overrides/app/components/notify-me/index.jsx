@@ -26,26 +26,71 @@ import {
  *   - guest                                          → "Sign in to be notified" prompt (opens AuthModal)
  *   - registered                                     → one-tap "Notify me" (no email field)
  *
- * Submit states (registered branch only): idle | sending | done | error.
- * A 200 with status "already-subscribed" is treated as success (idempotent).
+ * Registered sub-states: checking | idle | sending | done | already | error.
+ *   - checking : we ask the server whether this shopper is ALREADY on the list
+ *                for this SKU (see status check below) before showing an
+ *                actionable button — otherwise a subscribed shopper who
+ *                refreshes would see "Notify me" again and could create a
+ *                duplicate row.
+ *   - already  : subscribed on a PRIOR visit → passive confirmation, no button.
+ *   - done     : subscribed just now         → passive confirmation, no button.
+ * A POST that returns status "already-subscribed" is treated as success and
+ * lands in `already` (idempotent).
  *
  * ── LOCAL DEV ─────────────────────────────────────────────────────────────
  * The custom `/custom/waitlist` endpoint only exists on OUR sandbox (zzft-025),
  * not on the shared demo instance this app currently points at, and calling it
  * live needs a usable SLAS client (blocked — see docs/HLD.md §12). So while
  * developing against demo data we run in MOCK_MODE: submit simulates a
- * successful call. Set WAITLIST_LIVE=true at build time once the endpoint is
- * deployed and a real SLAS client is configured.
+ * successful call and persistence is mirrored in localStorage so the
+ * "already subscribed after refresh" behaviour is demoable without a backend.
+ * Set WAITLIST_LIVE=true at build time once the endpoint is deployed and a real
+ * SLAS client is configured; the component then uses the real GET status +
+ * POST subscribe calls instead.
  */
 const SCAPI_PATH = 'custom/waitlist/v1'
+
 // `process` is only defined server-side in the PWA Kit bundle; guard it so the
 // browser doesn't throw ReferenceError. Evaluated at submit time (not import)
 // so the flag can be toggled per environment/test rather than frozen once.
 const isMockMode = () => typeof process === 'undefined' || process.env.WAITLIST_LIVE !== 'true'
 
+// Base URL for the subscriptions resource. GET (with &sku=) reads status; POST
+// (with an email-free body) creates the subscription.
+const subscriptionsUrl = ({shortCode, organizationId, siteId}) =>
+    `https://${shortCode}.api.commercecloud.salesforce.com/${SCAPI_PATH}` +
+    `/organizations/${organizationId}/subscriptions?siteId=${siteId}`
+
+// ── MOCK persistence ────────────────────────────────────────────────────────
+// In MOCK_MODE there is no backend to remember a signup, so we stand in for the
+// server-side Custom Object with localStorage keyed by account email + SKU.
+// This is ONLY a dev/demo convenience; the live path uses the GET status call.
+const mockStorageKey = (email, sku) => `waitlist:${String(email || '').toLowerCase()}:${sku}`
+
+const readMockSubscribed = (email, sku) => {
+    if (typeof window === 'undefined' || !window.localStorage) return false
+    try {
+        return window.localStorage.getItem(mockStorageKey(email, sku)) === '1'
+    } catch (e) {
+        return false
+    }
+}
+
+const writeMockSubscribed = (email, sku) => {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    try {
+        window.localStorage.setItem(mockStorageKey(email, sku), '1')
+    } catch (e) {
+        /* storage unavailable (private mode / quota) — non-fatal for a demo */
+    }
+}
+
 const NotifyMeForm = ({sku, locale}) => {
     const intl = useIntl()
-    const [state, setState] = useState('idle')
+    // Registered flow starts in `checking`: we don't render an actionable button
+    // until the status lookup resolves, so a subscribed shopper never sees the
+    // one-tap button after a refresh.
+    const [state, setState] = useState('checking')
     const {getTokenWhenReady} = useAccessToken()
     const api = useCommerceApi()
     const authModal = useAuthModal()
@@ -68,14 +113,49 @@ const NotifyMeForm = ({sku, locale}) => {
         }
     }, [identityKnown, isRegistered, sku])
 
+    // ── Status check ────────────────────────────────────────────────────────
+    // For a registered shopper, ask the backend whether they're ALREADY on the
+    // list for this SKU before showing anything actionable. Re-runs when the
+    // selected variant (sku) changes. Fails OPEN: if we can't determine status
+    // we fall back to `idle` so the shopper can still subscribe.
+    useEffect(() => {
+        if (!identityKnown || !isRegistered) return undefined
+        let ignore = false
+        setState('checking')
+
+        const resolveStatus = async () => {
+            if (isMockMode()) return readMockSubscribed(displayEmail, sku)
+            const {shortCode, organizationId, siteId} = api.shopperProducts.clientConfig.parameters
+            const token = await getTokenWhenReady()
+            const url =
+                `${subscriptionsUrl({shortCode, organizationId, siteId})}` +
+                `&sku=${encodeURIComponent(sku)}`
+            const res = await fetch(url, {headers: {Authorization: `Bearer ${token}`}})
+            if (!res.ok) return false
+            const data = await res.json()
+            return Boolean(data && data.subscribed)
+        }
+
+        resolveStatus()
+            .then((subscribed) => {
+                if (!ignore) setState(subscribed ? 'already' : 'idle')
+            })
+            .catch(() => {
+                if (!ignore) setState('idle')
+            })
+
+        return () => {
+            ignore = true
+        }
+        // displayEmail/api/getTokenWhenReady are stable for a given session; we
+        // intentionally re-check only on identity resolution and variant change.
+    }, [identityKnown, isRegistered, sku])
+
     const submitLive = async () => {
         // shortCode / organizationId / siteId come from config/default.js.
         const {shortCode, organizationId, siteId} = api.shopperProducts.clientConfig.parameters
         const token = await getTokenWhenReady()
-        const url =
-            `https://${shortCode}.api.commercecloud.salesforce.com/${SCAPI_PATH}` +
-            `/organizations/${organizationId}/subscriptions?siteId=${siteId}`
-        const res = await fetch(url, {
+        const res = await fetch(subscriptionsUrl({shortCode, organizationId, siteId}), {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -84,7 +164,15 @@ const NotifyMeForm = ({sku, locale}) => {
             // NO email in the body — the endpoint derives it from the token.
             body: JSON.stringify({sku, locale})
         })
-        return res.ok
+        if (!res.ok) return {ok: false, already: false}
+        let already = false
+        try {
+            const data = await res.json()
+            already = Boolean(data && data.status === 'already-subscribed')
+        } catch (e) {
+            /* a 2xx with an unparseable body is still a successful subscribe */
+        }
+        return {ok: true, already}
     }
 
     // Simulates the endpoint locally: resolves ok after a short delay so the
@@ -92,7 +180,7 @@ const NotifyMeForm = ({sku, locale}) => {
     const submitMock = () =>
         new Promise((resolve) => {
             console.info('[NotifyMe:mock] would POST', {sku, locale})
-            setTimeout(() => resolve(true), 700)
+            setTimeout(() => resolve({ok: true, already: false}), 700)
         })
 
     const onSubmit = async (e) => {
@@ -100,8 +188,14 @@ const NotifyMeForm = ({sku, locale}) => {
         if (state === 'sending') return
         setState('sending')
         try {
-            const ok = isMockMode() ? await submitMock() : await submitLive()
-            setState(ok ? 'done' : 'error')
+            const result = isMockMode() ? await submitMock() : await submitLive()
+            if (result.ok) {
+                // Persist the mock "subscription" so a refresh lands in `already`.
+                if (isMockMode()) writeMockSubscribed(displayEmail, sku)
+                setState(result.already ? 'already' : 'done')
+            } else {
+                setState('error')
+            }
         } catch (err) {
             setState('error')
         }
@@ -172,7 +266,62 @@ const NotifyMeForm = ({sku, locale}) => {
         )
     }
 
-    // ── Registered, submitted: confirmation ─────────────────────────────────
+    // ── Registered, status still loading: skeleton (don't flash the button) ─
+    if (state === 'checking') {
+        return (
+            <Box
+                data-testid="notify-me-checking"
+                borderWidth="1px"
+                borderRadius="base"
+                p={4}
+                marginBottom={4}
+            >
+                <Stack spacing={3}>
+                    <Skeleton height={5} width="40%" />
+                    <Skeleton height={4} width="80%" />
+                    <Skeleton height={10} width="100%" />
+                </Stack>
+            </Box>
+        )
+    }
+
+    // ── Registered, already on the list (prior visit): passive confirmation ─
+    if (state === 'already') {
+        return (
+            <Box
+                data-testid="notify-me-already"
+                borderWidth="1px"
+                borderRadius="base"
+                p={4}
+                marginBottom={4}
+            >
+                <Text fontWeight="bold">
+                    {intl.formatMessage({
+                        defaultMessage: 'You’re already on the list ✓',
+                        id: 'notify_me.already_title'
+                    })}
+                </Text>
+                <Text fontSize="sm">
+                    {displayEmail
+                        ? intl.formatMessage(
+                              {
+                                  defaultMessage:
+                                      'We’ll email {email} the moment this is back in stock.',
+                                  id: 'notify_me.already_body'
+                              },
+                              {email: displayEmail}
+                          )
+                        : intl.formatMessage({
+                              defaultMessage:
+                                  'We’ll email your account address the moment this is back in stock.',
+                              id: 'notify_me.already_body_generic'
+                          })}
+                </Text>
+            </Box>
+        )
+    }
+
+    // ── Registered, submitted just now: confirmation ────────────────────────
     if (state === 'done') {
         return (
             <Box

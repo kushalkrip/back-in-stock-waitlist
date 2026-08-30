@@ -16,6 +16,10 @@ module.exports = {
     transformIgnorePatterns: [
         '/node_modules/(?!(@salesforce/retail-react-app|@salesforce/cc-datacloud-typescript)/.*)'
     ],
+    // Playwright E2E specs live under tests/e2e and use @playwright/test — they
+    // are run by `npm run test:e2e`, NOT Jest. Without this, Jest's default
+    // testMatch picks up the .spec.js file and the suite fails to load.
+    testPathIgnorePatterns: [...(base.testPathIgnorePatterns || []), '/tests/e2e/'],
     moduleNameMapper: {
         ...base.moduleNameMapper,
         // pulled from @salesforce/retail-react-app jest.config.js
