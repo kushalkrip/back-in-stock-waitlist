@@ -34,12 +34,14 @@ paths:
           required: true
           schema:
             type: string
-        - name: sku
+            minLength: 1
+        - name: c_sku
           in: query
           required: true
           description: The selected VARIANT product ID to check.
           schema:
             type: string
+            minLength: 1
       responses:
         '200':
           description: Subscription status for this shopper + SKU
@@ -50,7 +52,7 @@ paths:
         '400':
           description: Invalid input (invalid-sku)
       security:
-        - ShopperToken: []
+        - ShopperToken: [c_waitlist_rw]
     post:
       summary: Join the back-in-stock waitlist for a SKU
       operationId: joinWaitlist
@@ -65,6 +67,7 @@ paths:
           required: true
           schema:
             type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -85,13 +88,17 @@ paths:
         '500':
           description: Persistence error
       security:
-        - ShopperToken: []
+        - ShopperToken: [c_waitlist_rw]
 components:
   securitySchemes:
     ShopperToken:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://j1jska9w.api.commercecloud.salesforce.com/shopper/auth/v1/organizations/f_ecom_zzft_025/oauth2/authorize
+          tokenUrl: https://j1jska9w.api.commercecloud.salesforce.com/shopper/auth/v1/organizations/f_ecom_zzft_025/oauth2/token
+          scopes:
+            c_waitlist_rw: Manage back-in-stock waitlist subscriptions
   schemas:
     SubscriptionRequest:
       type: object

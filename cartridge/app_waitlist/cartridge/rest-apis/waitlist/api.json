@@ -1,7 +1,12 @@
 {
     "endpoints": [
         {
-            "endpoint": "waitlist",
+            "endpoint": "getWaitlistStatus",
+            "schema": "schema.yaml",
+            "implementation": "script"
+        },
+        {
+            "endpoint": "joinWaitlist",
             "schema": "schema.yaml",
             "implementation": "script"
         }

@@ -95,7 +95,7 @@ module.exports = {
             }
         },
         // The default site for your app. This value will be used when a siteRef could not be determined from the url
-        defaultSite: 'RefArch',
+        defaultSite: 'WaitlistDemo',
         // Provide aliases for your sites. These will be used in place of your site id when generating paths throughout the application.
         // siteAliases: {
         //    RefArch: 'us',
@@ -107,10 +107,10 @@ module.exports = {
         commerceAPI: {
             proxyPath: '/mobify/proxy/api',
             parameters: {
-                clientId: '44cfcf31-d64d-4227-9cce-1d9b0716c321',
-                organizationId: 'f_ecom_aaia_prd',
-                shortCode: 'xfdy2axw',
-                siteId: 'RefArch'
+                clientId: 'bcd5673e-0e8a-4614-a518-89840320cab0',
+                organizationId: 'f_ecom_zzft_025',
+                shortCode: 'j1jska9w',
+                siteId: 'WaitlistDemo'
             }
             // Optional: Set the domain for auth cookies to share them across subdomains.
             // If not set, cookies default to the current host.
@@ -195,11 +195,11 @@ module.exports = {
         enableHttpOnlySessionCookies: false,
         proxyConfigs: [
             {
-                host: 'xfdy2axw.api.commercecloud.salesforce.com',
+                host: 'j1jska9w.api.commercecloud.salesforce.com',
                 path: 'api'
             },
             {
-                host: 'production-sitegenesis-dw.demandware.net',
+                host: 'zzft-025.dx.commercecloud.salesforce.com',
                 path: 'ocapi'
             }
         ]

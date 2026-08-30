@@ -106,4 +106,20 @@ server.get(
     }
 );
 
+// Cache-safe CSRF token source for the PDP "Notify Me" button. The PDP itself
+// is page-cached, so a token embedded in that HTML would be stale/shared across
+// shoppers; instead the button fetches a fresh, session-bound token from this
+// uncached, login-gated endpoint at click time, then POSTs it to Subscribe.
+server.get(
+    'Token',
+    server.middleware.https,
+    userLoggedIn.validateLoggedInAjax,
+    csrfProtection.generateToken,
+    function (req, res, next) {
+        var csrf = res.getViewData().csrf || {};
+        res.json({tokenName: csrf.tokenName || 'csrf_token', token: csrf.token});
+        return next();
+    }
+);
+
 module.exports = server.exports();

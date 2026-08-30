@@ -1,0 +1,240 @@
+<iscomment>
+    app_waitlist OVERRIDE of app_storefront_base product/productDetails.isml.
+    Verbatim copy of the base PDP template plus a Back-In-Stock "Notify Me"
+    block inserted after the add-to-cart actions. Kept as a full override (not a
+    partial) so the block renders exactly once per PDP load — the availability
+    partial re-renders on every ajax variation change, which would duplicate it.
+
+    The button is cache-safe: it embeds NO CSRF token (the PDP is page-cacheable).
+    At click time it fetches a fresh, session-bound token from the login-gated
+    WaitList-Token endpoint, then POSTs it to WaitList-Subscribe. A guest is sent
+    to Login. The SKU is read live from .product-detail[data-pid] so it follows
+    the currently selected variant.
+</iscomment>
+<isdecorate template="common/layout/page">
+
+    <isscript>
+        var assets = require('*/cartridge/scripts/assets');
+        assets.addJs('/js/productDetail.js');
+        assets.addCss('/css/product/detail.css');
+    </isscript>
+
+    <isset name="product" value="${pdict.product}" scope="page" />
+    <isset name="isQuickView" value="${false}" scope="page" />
+    <isset name="isProductSet" value="${pdict.product.productType === 'set'}" scope="page" />
+    <isobject object="${product.raw}" view="detail">
+        <div class="container product-detail product-wrapper" data-pid="${product.id}">
+            <div class="row">
+                <div class="col-12">
+                    <!--Breadcrumbs-->
+                    <div class="product-breadcrumb d-md-none">
+                        <isinclude template="components/breadcrumbs/pageBreadcrumbs"/>
+                    </div>
+
+                    <!-- Product Name -->
+                    <div class="row">
+                        <div class="d-md-none col-sm-12">
+                            <h1 class="product-name">${product.productName}</h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Product Images Carousel -->
+                <isinclude template="product/components/imageCarousel" />
+
+                <div class="col-12 col-sm-6">
+                    <!--Breadcrumbs-->
+                    <div class="row">
+                        <div class="product-breadcrumb col hidden-sm-down">
+                            <isinclude template="components/breadcrumbs/pageBreadcrumbs"/>
+                        </div>
+                    </div>
+
+                    <!-- Product Name -->
+                    <div class="row">
+                        <div class="col">
+                            <h1 class="product-name hidden-sm-down">${product.productName}</h1>
+                        </div>
+                    </div>
+
+
+                    <div class="row">
+                        <div class="col">
+                            <isinclude template="product/components/pidRating" />
+                        </div>
+                    </div>
+
+                    <div class="attributes">
+                        <!-- Attributes and Quantity -->
+                        <isinclude template="product/components/mainAttributes" />
+
+                        <isset name="isBundle" value="${false}" scope="page" />
+                        <isset name="loopState" value="${{count: 1}}" scope="page" />
+                        <isloop items="${product.variationAttributes}" var="attr" status="attributeStatus">
+                            <div class="row" data-attr="${attr.id}">
+                                <div class="col-8">
+                                    <isinclude template="product/components/variationAttribute" />
+                                </div>
+
+                                <isif condition="${attributeStatus.last && !isBundle}">
+                                    <!-- Quantity Drop Down Menu -->
+                                    <div class="attribute quantity col-4">
+                                        <isinclude template="product/components/quantity" />
+                                    </div>
+                                </isif>
+                            </div>
+                        </isloop>
+
+                        <isif condition="${!product.variationAttributes}">
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="simple-quantity">
+                                        <isinclude template="product/components/quantity" />
+                                    </div>
+                                </div>
+                            </div>
+                        </isif>
+
+                        <div class="product-options">
+                            <isif condition="${product.options && product.options.length > 0}">
+                                <isinclude template="product/components/options" />
+                            </isif>
+                        </div>
+
+                        <!-- Size Chart -->
+                        <isif condition="${product.variationAttributes && product.sizeChartId}">
+                            <div class="row">
+                                <div class="size-chart col-12">
+                                    <isinclude template="product/components/sizeChart" />
+                                </div>
+                            </div>
+                        </isif>
+
+                        <!-- Product Availability -->
+                        <isinclude template="product/components/productAvailability" />
+
+                        <!-- Applicable Promotions -->
+                        <div class="row">
+                            <div class="col-12 promotions">
+                                <isinclude template="product/components/promotions" />
+                            </div>
+                        </div>
+
+                        <div class="prices-add-to-cart-actions">
+                            <div class="row">
+                                <div class="col-12">
+                                    <!-- Prices -->
+                                    <div class="prices">
+                                        <isset name="price" value="${product.price}" scope="page" />
+                                        <isinclude template="product/components/pricing/main" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!--
+                                Cart and [Optionally] Apple Pay.
+                                Back-In-Stock (app_waitlist): when the product is fully out of
+                                stock, the "Notify Me" block below REPLACES Add-to-Cart
+                                (docs/UI-DESIGN.md locked decision), so we suppress the base
+                                add-to-cart button in that case rather than showing it disabled.
+                                Sets/bundles keep the base button (a bundle back-in-stock is a
+                                separate spec).
+                            -->
+                            <isif condition="${product.available || product.productType === 'set' || product.productType === 'bundle'}">
+                                <isinclude template="product/components/addToCartProduct" />
+                            </isif>
+                        </div>
+
+                        <!--
+                            Back-In-Stock Waitlist: Notify Me (app_waitlist).
+                            Shown ONLY when the product is fully out of stock, i.e. not
+                            orderable (product.available === false) — mirrors the PWA rule
+                            (docs/UI-DESIGN.md: showNotifyMe = fully-OOS only). Sets/bundles
+                            are excluded (a bundle back-in-stock is a separate spec). When in
+                            stock, nothing renders and the base Add-to-Cart stands alone.
+                        -->
+                        <isif condition="${!product.available && product.productType !== 'set' && product.productType !== 'bundle'}">
+                        <div class="row waitlist-notify" style="margin-top:.75rem;">
+                            <div class="col-12">
+                                <button type="button" class="btn btn-outline-primary btn-block js-waitlist-notify"
+                                    data-sku="${product.id}"
+                                    data-token-url="${URLUtils.url('WaitList-Token')}"
+                                    data-subscribe-url="${URLUtils.url('WaitList-Subscribe')}"
+                                    data-login-url="${URLUtils.url('Login-Show')}">
+                                    Notify me when back in stock
+                                </button>
+                                <div class="waitlist-notify-msg" aria-live="polite" style="margin-top:.5rem;"></div>
+                            </div>
+                        </div>
+                        <script>
+                        (function () {
+                            var btn = document.querySelector('.js-waitlist-notify');
+                            if (!btn || btn.getAttribute('data-bound')) { return; }
+                            btn.setAttribute('data-bound', '1');
+                            var msgEl = document.querySelector('.waitlist-notify-msg');
+                            function setMsg(t) { if (msgEl) { msgEl.textContent = t; } }
+                            function toLogin(j) {
+                                window.location.href = (j && j.redirectUrl) || btn.getAttribute('data-login-url');
+                            }
+                            btn.addEventListener('click', function () {
+                                btn.disabled = true;
+                                var wrap = document.querySelector('.product-detail');
+                                var sku = (wrap && wrap.getAttribute('data-pid')) || btn.getAttribute('data-sku');
+                                fetch(btn.getAttribute('data-token-url'), {
+                                    credentials: 'include',
+                                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                                }).then(function (r) {
+                                    return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j }; });
+                                }).then(function (res) {
+                                    if (res.status === 401 || res.j.loggedin === false || !res.j.token) { toLogin(res.j); return null; }
+                                    var name = res.j.tokenName || 'csrf_token';
+                                    var body = 'sku=' + encodeURIComponent(sku) + '&' + encodeURIComponent(name) + '=' + encodeURIComponent(res.j.token);
+                                    return fetch(btn.getAttribute('data-subscribe-url'), {
+                                        method: 'POST', credentials: 'include',
+                                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                                        body: body
+                                    }).then(function (r) {
+                                        return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j }; });
+                                    });
+                                }).then(function (res) {
+                                    if (!res) { return; }
+                                    var j = res.j || {};
+                                    if (res.status === 401 || j.loggedin === false) { toLogin(j); return; }
+                                    if (j.success) {
+                                        btn.textContent = (j.status === 'already-subscribed') ? 'Already on the waitlist' : 'On the waitlist ✓';
+                                        setMsg(j.status === 'already-subscribed'
+                                            ? "You're already signed up — we'll email you when it's back in stock."
+                                            : "Done! We'll email you when this item is back in stock.");
+                                    } else {
+                                        setMsg('Sorry, something went wrong. Please try again.');
+                                        btn.disabled = false;
+                                    }
+                                }).catch(function () { setMsg('Network error. Please try again.'); btn.disabled = false; });
+                            });
+                        })();
+                        </script>
+                        </isif>
+
+                        <!-- Social Sharing Icons -->
+                        <div class="row">
+                            <isinclude template="product/components/socialIcons" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <isslot id="cts-recommendations-m" description="Complete the set products" context="global" context-object="${pdict.product.raw}" />
+            </div>
+
+            <isset name="loopState" value="${{count: 1}}" scope="page" />
+            <isinclude template="product/components/descriptionAndDetails" />
+
+            <div class="recommendations">
+                <isslot id="product-recommendations-m" description="Recommended products" context="global" context-object="${pdict.product.raw}" />
+            </div>
+        </div>
+    </isobject>
+</isdecorate>

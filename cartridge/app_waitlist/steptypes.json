@@ -23,15 +23,14 @@
                             "@type": "long",
                             "@required": false,
                             "description": "Minimum available-to-sell quantity before notifying. Default 1.",
-                            "@min-value": 1
+                            "min-value": "1"
                         }
                     ]
                 },
                 "status-codes": {
                     "status": [
                         { "@code": "OK", "description": "Completed successfully." },
-                        { "@code": "ERROR", "description": "Step failed." },
-                        { "@code": "FINISHED_WITH_WARNINGS", "description": "Some notifications deferred; will retry next run." }
+                        { "@code": "ERROR", "description": "Step failed." }
                     ]
                 }
             }

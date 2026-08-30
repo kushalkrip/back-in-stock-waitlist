@@ -123,7 +123,9 @@ exports.joinWaitlist.public = true;
  * other shoppers.
  */
 exports.getWaitlistStatus = function () {
-    var sku = (request.httpParameterMap.sku.stringValue || '').trim();
+    // Custom SCAPI query params must be c_-prefixed at the edge; only siteId/locale
+    // are allowed bare. The wire param is c_sku, mapped back to the SKU here.
+    var sku = (request.httpParameterMap.get('c_sku').stringValue || '').trim();
     if (!sku) {
         RESTResponseMgr.createError(400, 'invalid-sku', 'A product SKU is required').render();
         return;

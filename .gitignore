@@ -30,3 +30,5 @@ playwright-report/
 # Local env / secrets — never commit credentials
 .env
 .env.*
+dw.json
+**/dw.json
