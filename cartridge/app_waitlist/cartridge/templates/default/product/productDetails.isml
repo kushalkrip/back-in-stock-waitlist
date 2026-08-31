@@ -259,6 +259,27 @@
                                 });
                             }
                             attach();
+
+                            // ---- Post-login confirmation (zero network) ----
+                            // A guest who clicked Notify Me was auto-subscribed
+                            // server-side during login (see Account.js). We land
+                            // back here with ?wlnotified=1, so reflect the
+                            // confirmed state immediately without a status call,
+                            // then strip the marker so a refresh/share is clean.
+                            (function () {
+                                if (!/[?&]wlnotified=1(&|$)/.test(window.location.search)) { return; }
+                                btn.disabled = true;
+                                btn.textContent = 'On the waitlist ✓';
+                                setMsg("Done! We'll email you when this item is back in stock.");
+                                if (window.history && window.history.replaceState) {
+                                    var clean = window.location.pathname
+                                        + window.location.search.replace(/([?&])wlnotified=1(&|$)/, function (m, p1, p2) {
+                                            return (p1 === '?' && p2 === '&') ? '?' : (p2 === '&' ? p1 : '');
+                                        })
+                                        + window.location.hash;
+                                    window.history.replaceState(null, '', clean);
+                                }
+                            })();
                         })();
                         </script>
 

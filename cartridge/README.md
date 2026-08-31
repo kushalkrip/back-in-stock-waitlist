@@ -234,16 +234,34 @@ route. If you already override `product/productDetails.isml`, merge the ~30-line
 waitlist block (after `prices-add-to-cart-actions`) plus the inline `<script>` into
 your override.
 
-**Return-to-PDP after login.** A guest who clicks "Notify Me" is sent to
-`WaitList-BeforeLogin?sku=…`, which stashes the originating product page in the
-session and hands off to the standard login. After login/registration the shopper
-lands **back on that PDP** instead of the account dashboard. This is done by an
-`accountHelpers.getLoginRedirectURL` override (`module.superModule`) that prefers a
-`waitlistReturnUrl` stash; the URL is built **server-side from the SKU**
-(`URLUtils.url('Product-Show', …)`), never from client input, so there is no
-open-redirect surface, and normal logins (no stash) fall through to base behavior
-unchanged. Because it's a superModule override, it composes with any existing
-`accountHelpers` override as long as `app_waitlist` is on the cartridge path.
+**Guest → login → auto-subscribed (no re-click, no added latency).** A guest who
+clicks "Notify Me" is sent to `WaitList-BeforeLogin?sku=…`, which stashes two
+things in the session: the originating PDP URL (`waitlistReturnUrl`) and the
+subscribe **intent** (`waitlistPendingSku`). It then hands off to the standard
+login. On a successful login **or** registration, `Account.js` (an extension of
+the base Account controller via `server.extend(module.superModule)`) runs a
+`route:BeforeComplete` hook that reads the pending SKU and writes the subscription
+**server-side, inside the same login request**, using the now-authenticated email
+(`res.viewData.authenticatedCustomer.profile.email`). The shopper then lands back
+on the PDP (via the `accountHelpers.getLoginRedirectURL` `module.superModule`
+override that prefers `waitlistReturnUrl`) with a `?wlnotified=1` marker, and the
+button shows "On the waitlist ✓" with **zero extra network calls**. Net effect:
+the guest clicks once, logs in, and is already on the waitlist — they never click
+"Notify Me" a second time.
+
+Design notes:
+- **No extra round-trip.** The write happens during the login POST, not as a
+  follow-up ajax call, so there is no perceptible latency.
+- **Shared write path.** The controller click (`WaitList-Subscribe`) and the
+  post-login hook both call `scripts/helpers/waitlistSubscribe.js`, so dedupe, the
+  `sha256(email|sku)` key, and the status machine are identical either way.
+- **Open-redirect safe.** The return URL is built server-side from the SKU
+  (`URLUtils.url('Product-Show', …)`), never from client input.
+- **Fail-safe.** If the write throws it is logged and swallowed — a waitlist
+  problem never breaks the login. On a *failed* login the pending intent is left
+  in place so the next successful attempt still completes it.
+- **No-op for everyone else.** Normal logins (no stashed intent) fall through to
+  base behavior unchanged — verified: they still land on `Account-Show`.
 
 ---
 

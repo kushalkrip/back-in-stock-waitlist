@@ -22,9 +22,8 @@ var csrfProtection = require('*/cartridge/scripts/middleware/csrf');
 var userLoggedIn = require('*/cartridge/scripts/middleware/userLoggedIn');
 
 var CustomObjectMgr = require('dw/object/CustomObjectMgr');
-var Transaction = require('dw/system/Transaction');
-var Calendar = require('dw/util/Calendar');
 var URLUtils = require('dw/web/URLUtils');
+var subscribeHelper = require('*/cartridge/scripts/helpers/waitlistSubscribe');
 
 var OBJECT_TYPE = 'WaitlistSubscription';
 
@@ -41,36 +40,16 @@ server.post(
         var sku = (req.form.sku || '').trim();
         var locale = req.locale.id;
 
-        if (!email) {
-            res.setStatusCode(401);
-            res.json({success: false, error: 'no-account-email'});
+        // Shared write path (see scripts/helpers/waitlistSubscribe.js) — identical
+        // to the post-login auto-resume hook in Account.js.
+        var result = subscribeHelper.subscribe(email, sku, locale);
+        if (!result.success) {
+            res.setStatusCode(result.error === 'no-account-email' ? 401 : 400);
+            res.json({success: false, error: result.error});
             return next();
         }
-        if (!sku) {
-            res.setStatusCode(400);
-            res.json({success: false, error: 'invalid-sku'});
-            return next();
-        }
 
-        var key = require('*/cartridge/scripts/util/waitlistKey').make(email, sku);
-        var alreadySubscribed = false;
-
-        Transaction.wrap(function () {
-            var existing = CustomObjectMgr.getCustomObject(OBJECT_TYPE, key);
-            if (existing) {
-                alreadySubscribed = true;
-                return;
-            }
-            var co = CustomObjectMgr.createCustomObject(OBJECT_TYPE, key);
-            co.custom.email = email;
-            co.custom.productID = sku;
-            co.custom.status = 'PENDING';
-            co.custom.locale = locale;
-            co.custom.createdAt = new Calendar().getTime();
-            co.custom.attemptCount = 0;
-        });
-
-        res.json({success: true, status: alreadySubscribed ? 'already-subscribed' : 'subscribed'});
+        res.json({success: true, status: result.status});
         return next();
     }
 );
@@ -142,6 +121,11 @@ server.get(
         if (sku) {
             var target = URLUtils.url('Product-Show', 'pid', sku).relative().toString();
             req.session.privacyCache.set('waitlistReturnUrl', target);
+            // Carry the subscribe INTENT across login. After a successful
+            // login/registration, Account.js consumes this and writes the
+            // subscription server-side (using the now-authenticated email), so
+            // the shopper never has to click "Notify Me" a second time.
+            req.session.privacyCache.set('waitlistPendingSku', sku);
         }
         res.redirect(URLUtils.url('Login-Show'));
         return next();
