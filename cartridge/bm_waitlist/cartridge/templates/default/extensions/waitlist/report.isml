@@ -49,19 +49,19 @@
         <iselse/>
             <div class="wl-cards">
                 <div class="wl-card alert">
-                    <span class="n">${totals.oosWithDemand}</span>
+                    <span class="n"><isprint value="${totals.oosWithDemand}" formatter="#,##0"/></span>
                     <span class="l">Restock now</span>
                 </div>
                 <div class="wl-card">
-                    <span class="n">${totals.waiting}</span>
+                    <span class="n"><isprint value="${totals.waiting}" formatter="#,##0"/></span>
                     <span class="l">Shoppers waiting</span>
                 </div>
                 <div class="wl-card">
-                    <span class="n">${totals.skus}</span>
+                    <span class="n"><isprint value="${totals.skus}" formatter="#,##0"/></span>
                     <span class="l">SKUs tracked</span>
                 </div>
                 <div class="wl-card">
-                    <span class="n">${totals.notified}</span>
+                    <span class="n"><isprint value="${totals.notified}" formatter="#,##0"/></span>
                     <span class="l">Already notified</span>
                 </div>
             </div>
@@ -97,9 +97,9 @@
                                 <td>
                                     <isif condition="${r.inStock}"><span class="stock-yes">In stock</span><iselse/><span class="stock-no">Out of stock</span></isif>
                                 </td>
-                                <td class="num">${r.waiting}</td>
-                                <td class="num">${r.notified}</td>
-                                <td class="num">${r.failed}</td>
+                                <td class="num"><isprint value="${r.waiting}" formatter="#,##0"/></td>
+                                <td class="num"><isprint value="${r.notified}" formatter="#,##0"/></td>
+                                <td class="num"><isprint value="${r.failed}" formatter="#,##0"/></td>
                             </tr>
                         </isloop>
                     </tbody>

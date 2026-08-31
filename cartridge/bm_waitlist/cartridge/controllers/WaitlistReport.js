@@ -18,7 +18,7 @@ var ISML = require('dw/template/ISML');
 var Logger = require('dw/system/Logger');
 var waitlistDemand = require('*/cartridge/scripts/helpers/waitlistDemand');
 
-var log = Logger.getLogger('bm', 'WaitlistReport');
+var log = Logger.getLogger('waitlist', 'WaitlistReport');
 
 /**
  * Render the ranked demand table.
