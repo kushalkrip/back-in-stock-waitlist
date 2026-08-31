@@ -123,6 +123,119 @@ from `pwa/overrides/` into the matching override paths; `npm start` → `localho
 
 ---
 
+## Install on an SFRA site (step by step)
+
+This is the SFRA-specific path (server-rendered storefront). The
+`rest-apis/waitlist/` folder is only for the PWA-Kit build — SFRA uses the
+`WaitList.js` controller instead, so you can ignore that directory here.
+
+Everything below is standard SFCC wiring. **The only customer-specific value is
+the outbound service URL in step 4** — nothing is hardcoded to a particular
+instance.
+
+### 1. Deploy the cartridge to the active code version
+- WebDAV-upload the `app_waitlist` folder into the active code version (VS Code
+  **Prophet**, `dwupload`, or `sgmf-scripts`). For an SSO account, the WebDAV
+  password is a **BM-generated access key**, not your login password.
+- **Activate (or re-activate) the code version.** This is the step that registers
+  `custom.WaitlistNotifyStep` from `steptypes.json` — a plain WebDAV copy into the
+  already-active version does *not* register it (you would get `StepTypeIdUnknown`
+  when the job runs).
+
+### 2. Add it to the site cartridge path — **before `app_storefront_base`**
+Merchant Tools → *(site)* → Settings → Manage the Storefront Cartridge Path:
+```
+app_waitlist:app_storefront_base
+```
+Order matters. `app_waitlist` ships a full override of
+`product/productDetails.isml` (the "Notify Me" swap + live variant reactivity). If
+`app_waitlist` is not *ahead* of `app_storefront_base`, the override never wins and
+the button will not appear. Add it to the **Business Manager** cartridge path too if
+you want the BM-side scripts on the path.
+
+### 3. Import the metadata (creates the custom object type)
+Administration → Site Development → **Site Import & Export** → upload a zip of
+`metadata/back_in_stock/` → Import. The must-have piece is the
+**`WaitlistSubscription`** custom object type (`custom-objecttype-definitions.xml`) —
+this is where signups are stored (storage scope = **site**).
+
+> `services.xml` / `jobs.xml` in the same folder are version-sensitive imports. If
+> they import cleanly, great; otherwise create the service and job in the BM UI
+> (steps 4–5) — the custom-object import is the one that always works.
+
+### 4. Configure the outbound notify service (the one customer-specific step)
+Administration → Operations → **Services**:
+- **Credential** `waitlist.http.notify.cred` → set the **URL to your own email /
+  notification endpoint** (an ESP webhook, a middleware endpoint, etc. — the repo
+  ships a `webhook.site` sink as a stand-in).
+- **Profile** `waitlist.http.notify.profile` → timeout 5000 ms, circuit breaker
+  5/30 s, rate limit 50/60 s (tune to your provider).
+- **Service** `waitlist.http.notify` → type HTTP, enabled. Set **mock mode = true**
+  to exercise the whole flow with no real endpoint (`mockCall` returns 200).
+
+### 5. Schedule the notify job (reconciliation half)
+Administration → Operations → **Jobs** → new job → add step
+`custom.WaitlistNotifyStep` → scope it to **your site**, `NotifyThreshold=1`,
+recurring (e.g. every 5 min — the run is cheap: one inventory check per distinct
+waiting SKU, then exit). Exit rules: `ERROR` → stop.
+
+### 6. (Recommended) Near-real-time notifications — chain the same step after your stock feed
+The step is **self-contained**: its `beforeStep` opens its own query for `PENDING`
+rows and it takes **no input from any prior step** — it only needs to run in the
+site context. So you can add the *same* `custom.WaitlistNotifyStep` as a **second
+step in the job that already imports your inventory feed**, right after the import
+step. Steps in a flow run sequentially and each commits before the next starts, so
+by the time the notify step reads inventory the restock is already live.
+
+In `jobs.xml` this is just a second `<step>` in the same `<flow>`:
+```xml
+<job job-id="InventoryImportAndNotify">
+    <flow>
+        <context site-id="YOUR-SITE-ID"/>
+        <!-- Step 1: your existing stock feed import (placeholder) -->
+        <step step-id="import" type="ImportInventoryLists" enforce-restart="false">
+            <parameters>
+                <parameter name="ImportFile">inventory/stock.xml</parameter>
+                <parameter name="ImportMode">MERGE</parameter>
+            </parameters>
+        </step>
+        <!-- Step 2: SAME notify step, now event-primary -->
+        <step step-id="notify" type="custom.WaitlistNotifyStep" enforce-restart="false">
+            <parameters>
+                <parameter name="NotifyThreshold">1</parameter>
+            </parameters>
+        </step>
+    </flow>
+    <rules>
+        <on-exit status="ERROR"><stop-job/></on-exit>
+    </rules>
+</job>
+```
+Or in the BM Jobs UI: open your inventory-import job → **Job Steps** → add
+`custom.WaitlistNotifyStep` after the import step, same site scope,
+`NotifyThreshold=1`.
+
+**Keep the recurring job from step 5 as well** — running both is harmless (the step
+reads only `PENDING` rows and flips them per row, so whichever runs first notifies
+and the other finds nothing). Event-primary gives latency; the recurring job is the
+reconciliation safety net that catches manual BM stock edits, feed-mapping gaps, and
+rows left `PENDING` by a transient failure. Two things to get right:
+1. **Exit rules** — make sure a non-fatal `FINISHED_WITH_WARNINGS` from the import
+   step does not abort the flow before the notify step runs.
+2. **Commit boundary** — steps are sequential and each commits before the next, so
+   the notify step always reads committed inventory (no partial-read race).
+
+### What the shopper sees (no extra work)
+Once the above is done, on any PDP where the selected variant is out of stock the
+template automatically hides Add-to-Cart and shows **"Notify me when back in
+stock"** (registered-users-only; guests are routed to Login), flips live as the
+shopper changes size/color, and POSTs to the already-registered `WaitList-Subscribe`
+route. If you already override `product/productDetails.isml`, merge the ~30-line
+waitlist block (after `prices-add-to-cart-actions`) plus the inline `<script>` into
+your override.
+
+---
+
 ## Resilience (the design centerpiece)
 
 | Requirement | Failure mode | Design response |

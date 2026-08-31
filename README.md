@@ -56,6 +56,11 @@ at build time once the endpoint is deployed.
 **Cartridge (backend):** deploy `cartridge/app_waitlist` to the sandbox and import
 `cartridge/metadata/back_in_stock/`. Full steps in [`cartridge/README.md`](cartridge/README.md).
 
+**Installing on your own SFRA site:** a step-by-step SFRA install guide — deploy +
+activate, cartridge path ordering, metadata import, the outbound service, the notify
+job, and how to chain it after your inventory feed for near-real-time notifications —
+is in [`cartridge/README.md` → *Install on an SFRA site*](cartridge/README.md#install-on-an-sfra-site-step-by-step).
+
 ## Testing
 
 - **Jest** component tests cover the frontend identity branches
