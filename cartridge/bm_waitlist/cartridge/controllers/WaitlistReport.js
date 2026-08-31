@@ -11,7 +11,7 @@
  * The aggregation lives in app_waitlist so the scheduled export job and this
  * page share one code path. That requires app_waitlist to also be on the
  * Business Manager site's cartridge path (path = bm_waitlist:app_waitlist), so
- * the '*/' lookup resolves waitlistDemand here.
+ * the path-relative require below resolves waitlistDemand here.
  */
 
 var ISML = require('dw/template/ISML');
