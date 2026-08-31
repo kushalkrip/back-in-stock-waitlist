@@ -24,15 +24,10 @@
         table.wl th, table.wl td { border: 1px solid #d8dde6; padding: 7px 10px; text-align: left; }
         table.wl th { background: #eef1f6; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #54698d; }
         table.wl td.num { text-align: right; font-variant-numeric: tabular-nums; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
-        .badge.HIGH { background: #c23934; color: #fff; }
-        .badge.MEDIUM { background: #ffb75d; color: #3e2c00; }
-        .badge.LOW { background: #ffe9a8; color: #3e3200; }
-        .badge.REVIEW { background: #706e6b; color: #fff; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; white-space: nowrap; }
+        .badge.DELETED { background: #c23934; color: #fff; }
+        .badge.OUT_OF_STOCK { background: #ffb75d; color: #3e2c00; }
         .badge.IN_STOCK { background: #04844b; color: #fff; }
-        .badge.NONE { background: #e0e5ee; color: #54698d; }
-        .stock-no { color: #c23934; font-weight: bold; }
-        .stock-yes { color: #04844b; }
         .wl-empty, .wl-error { padding: 20px; border: 1px dashed #d8dde6; border-radius: 4px; color: #54698d; }
         .wl-error { border-color: #c23934; color: #c23934; }
     </style>
@@ -76,11 +71,10 @@
                 <table class="wl">
                     <thead>
                         <tr>
-                            <th>Priority</th>
+                            <th class="num">Waiting</th>
+                            <th>Status</th>
                             <th>SKU</th>
                             <th>Product</th>
-                            <th>Stock</th>
-                            <th class="num">Waiting</th>
                             <th class="num">Notified</th>
                             <th class="num">Failed</th>
                         </tr>
@@ -88,16 +82,18 @@
                     <tbody>
                         <isloop items="${report.rows}" var="r">
                             <tr>
-                                <td><span class="badge ${r.priority}">${r.priority}</span></td>
-                                <td>${r.sku}</td>
-                                <td>
-                                    ${r.productName}
-                                    <isif condition="${!r.productExists}"> <em>(offline/deleted)</em></isif>
-                                </td>
-                                <td>
-                                    <isif condition="${r.inStock}"><span class="stock-yes">In stock</span><iselse/><span class="stock-no">Out of stock</span></isif>
-                                </td>
                                 <td class="num"><isprint value="${r.waiting}" formatter="#,##0"/></td>
+                                <td>
+                                    <isif condition="${r.status === 'DELETED'}">
+                                        <span class="badge DELETED">&#9888; Deleted</span>
+                                    <iselseif condition="${r.status === 'OUT_OF_STOCK'}"/>
+                                        <span class="badge OUT_OF_STOCK">Out of stock</span>
+                                    <iselse/>
+                                        <span class="badge IN_STOCK">In stock</span>
+                                    </isif>
+                                </td>
+                                <td>${r.sku}</td>
+                                <td>${r.productName}</td>
                                 <td class="num"><isprint value="${r.notified}" formatter="#,##0"/></td>
                                 <td class="num"><isprint value="${r.failed}" formatter="#,##0"/></td>
                             </tr>

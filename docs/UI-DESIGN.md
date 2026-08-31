@@ -819,7 +819,7 @@ Three pieces, one shared code path:
 
 | Piece | File | Role |
 |---|---|---|
-| Shared aggregation | `cartridge/app_waitlist/cartridge/scripts/helpers/waitlistDemand.js` | Single source of truth: reads all `WaitlistSubscription` rows, groups by variant SKU, joins live stock, ranks by restock priority. `build()` + `toCsv()`. |
+| Shared aggregation | `cartridge/app_waitlist/cartridge/scripts/helpers/waitlistDemand.js` | Single source of truth: reads all `WaitlistSubscription` rows, groups by variant SKU, joins live stock, ranks by raw demand count. `build()` + `toCsv()`. |
 | BM page + CSV download | `cartridge/bm_waitlist/` (`bm_extensions.xml`, `controllers/WaitlistReport.js`, `templates/.../extensions/waitlist/report.isml`) | Merchant Tools menu entry rendering the ranked table; a "Download CSV" link streams the same data. |
 | Scheduled export job | `cartridge/app_waitlist/cartridge/scripts/steps/waitlistDemandReport.js` + `steptypes.json` (`custom.WaitlistDemandReport`) | Writes `waitlist-demand-<site>-<stamp>.csv` to IMPEX on a schedule for downstream/ERP pickup. |
 
@@ -850,19 +850,28 @@ through the normal, rate-controlled job pipeline.
   also be on the BM path so the controller's `require('*/cartridge/scripts/helpers/waitlistDemand')`
   resolves (the shared module physically lives in `app_waitlist`).
 
-### 14.4 Priority ranking (what the badge column means)
+### 14.4 Ranking model — count and catalog status are ORTHOGONAL
 
-`priorityFor(counts, inStock, productExists)` classifies each SKU; rows sort by rank →
-waiting-count desc → SKU:
+Two independent signals, deliberately **not** collapsed into one column:
+
+1. **Demand = the raw `waiting` count**, and it is the primary sort key (desc). The count
+   is the one signal that stays meaningful across merchant scale — a boutique with 3
+   waiting and an enterprise with 30,000 both rank correctly with no per-merchant
+   thresholds to tune. This is why the earlier fixed `HIGH ≥10 / MEDIUM ≥3 / LOW ≥1`
+   ladder was dropped: absolute cut-offs are noise at one scale and useless at another.
+2. **Catalog status = a separate badge column** answering a question the count cannot —
+   *can this SKU still be fulfilled?* — via `catalogStatus(inStock, productExists)`:
 
 | Badge | Condition | Meaning for the merchant |
 |---|---|---|
-| `REVIEW` | product no longer resolves (`!productExists`) | Data hygiene — a subscription points at a deleted/offline product. |
-| `HIGH` | out of stock, `waiting ≥ 10` | Reorder first. |
-| `MEDIUM` | out of stock, `waiting ≥ 3` | Reorder soon. |
-| `LOW` | out of stock, `waiting ≥ 1` | Some latent demand. |
-| `IN_STOCK` | product currently in stock | Notify job should be draining these; shown for completeness. |
-| `NONE` | out of stock, `waiting = 0` | Only historical/notified rows remain. |
+| `DELETED` | product no longer resolves (`!productExists`) | Data hygiene — a subscription points at a deleted/offline product. Shown regardless of demand. |
+| `OUT_OF_STOCK` | resolvable product, not available | Restock candidate. |
+| `IN_STOCK` | product currently available | Notify job should be draining these; shown for completeness. |
+
+Because status is its own column, a **deleted product with high demand keeps BOTH facts** —
+it floats to the top by count *and* carries the `DELETED` flag, instead of the two signals
+competing for one cell. Sort is `waiting` desc → catalog status (attention-first tie-break:
+`DELETED` → `OUT_OF_STOCK` → `IN_STOCK`) → SKU for reproducibility.
 
 The summary cards at the top surface the single most actionable number first —
 **"Restock now"** = `oosWithDemand` (SKUs that are out of stock *and* have someone waiting)
@@ -884,15 +893,15 @@ The summary cards at the top surface the single most actionable number first —
 │                                                                             │
 │ [ Download CSV ]                                                            │
 │                                                                             │
-│ ┌──────────┬──────────┬──────────────┬───────────┬───────┬────────┬──────┐ │
-│ │ PRIORITY │ SKU      │ PRODUCT      │ STOCK     │WAITING│NOTIFIED│FAILED│ │
-│ ├──────────┼──────────┼──────────────┼───────────┼───────┼────────┼──────┤ │
-│ │ [HIGH]   │ SKU-9-BLK│ Aria Boot 9  │ Out of st.│  14   │   0    │  0   │ │
-│ │ [MEDIUM] │ SKU-7-RED│ Vera Tee 7   │ Out of st.│   5   │   0    │  1   │ │
-│ │ [LOW]    │ SKU-3-GRN│ Nova Cap     │ Out of st.│   1   │   0    │  0   │ │
-│ │ [REVIEW] │ SKU-X    │ SKU-X (offl.)│ Out of st.│   2   │   0    │  0   │ │
-│ │ [IN_STK] │ SKU-1-BLU│ Base Tee 1   │ In stock  │   0   │   6    │  0   │ │
-│ └──────────┴──────────┴──────────────┴───────────┴───────┴────────┴──────┘ │
+│ ┌───────┬────────────────┬──────────┬──────────────┬────────┬──────┐        │
+│ │WAITING│ STATUS         │ SKU      │ PRODUCT      │NOTIFIED│FAILED│        │
+│ ├───────┼────────────────┼──────────┼──────────────┼────────┼──────┤        │
+│ │  14   │ [OUT OF STOCK] │ SKU-9-BLK│ Aria Boot 9  │   0    │  0   │        │
+│ │   5   │ [OUT OF STOCK] │ SKU-7-RED│ Vera Tee 7   │   0    │  1   │        │
+│ │   2   │ [⚠ DELETED]    │ SKU-X    │ SKU-X        │   0    │  0   │        │
+│ │   1   │ [OUT OF STOCK] │ SKU-3-GRN│ Nova Cap     │   0    │  0   │        │
+│ │   0   │ [IN STOCK]     │ SKU-1-BLU│ Base Tee 1   │   6    │  0   │        │
+│ └───────┴────────────────┴──────────┴──────────────┴────────┴──────┘        │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -902,7 +911,7 @@ as `report.error`) are both handled in the ISML. Styling is inline SLDS-flavoure
 
 ### 14.6 CSV contract (page download + scheduled job — identical)
 
-Header row: `SKU,Product,Waiting,Notified,Failed,InStock,Priority`. One row per SKU, RFC-4180
+Header row: `SKU,Product,Waiting,Notified,Failed,Status`. One row per SKU, RFC-4180
 quoting (embedded commas/quotes doubled). The page's "Download CSV" link and the scheduled
 `custom.WaitlistDemandReport` job produce byte-identical output because both call
 `waitlistDemand.toCsv(build())`. The job writes to IMPEX (`waitlist-demand-<siteId>-<yyyyMMdd-HHmmss>.csv`),
@@ -912,6 +921,7 @@ configurable via `OutputFolder` / `Threshold` step parameters.
 
 `waitlistDemand`'s ranking/counting/CSV logic is pinned by a dedicated unit suite
 (`test/unit/scripts/waitlistDemand.test.js`, 7 cases) that stubs `CustomObjectMgr` and
-`ProductMgr` via proxyquire — no instance required. It covers the full priority ladder,
-SKU grouping + status counts, iterator close, OOS-before-in-stock ranking, the REVIEW path
-for a missing product, and RFC-4180 CSV quoting. The whole cartridge unit suite is green.
+`ProductMgr` via proxyquire — no instance required. It covers `catalogStatus` (DELETED /
+OUT_OF_STOCK / IN_STOCK), SKU grouping + status counts, iterator close, count-first ranking
+with the catalog-status tie-break, the DELETED path for a missing product (count retained),
+and RFC-4180 CSV quoting. The whole cartridge unit suite is green.

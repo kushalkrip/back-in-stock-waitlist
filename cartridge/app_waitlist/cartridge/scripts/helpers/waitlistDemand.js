@@ -25,23 +25,27 @@ var ProductMgr = require('dw/catalog/ProductMgr');
 var OBJECT_TYPE = 'WaitlistSubscription';
 
 /**
- * Restock-priority label for a SKU.
- * @param {Object} counts - {waiting, notified, failed, total}
+ * Catalog state of a SKU -- deliberately ORTHOGONAL to demand.
+ *
+ * Demand magnitude is the raw `waiting` count (see build()'s sort): it is the
+ * one signal that stays meaningful whether a merchant has three shoppers or
+ * three million, so it needs no bucketing or per-merchant thresholds. This
+ * function answers a *separate* question the count cannot -- can the SKU still
+ * be fulfilled? -- so a deleted product with huge demand keeps BOTH its count
+ * AND a DELETED flag instead of collapsing into one mutually-exclusive tier.
+ *
  * @param {boolean} inStock - available-to-sell now
  * @param {boolean} productExists - product still resolvable in the catalog
- * @returns {string} one of HIGH | MEDIUM | LOW | REVIEW | IN_STOCK | NONE
+ * @returns {string} one of DELETED | OUT_OF_STOCK | IN_STOCK
  */
-function priorityFor(counts, inStock, productExists) {
-    if (!productExists) { return 'REVIEW'; }  // product offline/deleted since signup
-    if (inStock) { return 'IN_STOCK'; }        // available now; notify job will drain the queue
-    if (counts.waiting >= 10) { return 'HIGH'; }
-    if (counts.waiting >= 3) { return 'MEDIUM'; }
-    if (counts.waiting >= 1) { return 'LOW'; }
-    return 'NONE';                             // only fulfilled/failed rows remain
+function catalogStatus(inStock, productExists) {
+    if (!productExists) { return 'DELETED'; }   // offline/deleted since signup -> needs review
+    return inStock ? 'IN_STOCK' : 'OUT_OF_STOCK';
 }
 
-// Sort weight: actionable restocks (out-of-stock with demand) float to the top.
-var RANK = { HIGH: 0, MEDIUM: 1, LOW: 2, REVIEW: 3, IN_STOCK: 4, NONE: 5 };
+// Tie-break weight only: when two SKUs have equal demand, surface the one that
+// needs attention first (data problem, then restock, then already-sellable).
+var STATUS_RANK = { DELETED: 0, OUT_OF_STOCK: 1, IN_STOCK: 2 };
 
 /**
  * Build the ranked demand report from all WaitlistSubscription rows.
@@ -83,7 +87,7 @@ function build(opts) {
             var am = product.getAvailabilityModel();
             inStock = Boolean(am && am.isInStock(threshold));
         }
-        var priority = priorityFor(counts, inStock, productExists);
+        var state = catalogStatus(inStock, productExists);
 
         rows.push({
             sku: sku,
@@ -94,7 +98,7 @@ function build(opts) {
             failed: counts.failed,
             total: counts.total,
             inStock: inStock,
-            priority: priority
+            status: state
         });
 
         totals.skus++;
@@ -105,11 +109,12 @@ function build(opts) {
         if (!inStock && productExists && counts.waiting > 0) { totals.oosWithDemand++; }
     });
 
-    // Merchandiser ranking: (1) restock priority, (2) most still waiting,
-    // (3) SKU as a stable tie-break so runs are reproducible.
+    // Merchandiser ranking: (1) raw demand -- the count is the priority, and it
+    // is scale-agnostic; (2) catalog status as a tie-break so equal-demand SKUs
+    // that need attention surface first; (3) SKU for reproducible ordering.
     rows.sort(function (a, b) {
-        if (RANK[a.priority] !== RANK[b.priority]) { return RANK[a.priority] - RANK[b.priority]; }
         if (b.waiting !== a.waiting) { return b.waiting - a.waiting; }
+        if (STATUS_RANK[a.status] !== STATUS_RANK[b.status]) { return STATUS_RANK[a.status] - STATUS_RANK[b.status]; }
         return a.sku < b.sku ? -1 : (a.sku > b.sku ? 1 : 0);
     });
 
@@ -135,7 +140,7 @@ function csv(value) {
  * @returns {string}
  */
 function toCsv(report) {
-    var lines = ['SKU,Product,Waiting,Notified,Failed,InStock,Priority'];
+    var lines = ['SKU,Product,Waiting,Notified,Failed,Status'];
     report.rows.forEach(function (r) {
         lines.push([
             csv(r.sku),
@@ -143,8 +148,7 @@ function toCsv(report) {
             r.waiting,
             r.notified,
             r.failed,
-            r.inStock ? 'yes' : 'no',
-            r.priority
+            r.status
         ].join(','));
     });
     return lines.join('\n') + '\n';
@@ -153,5 +157,5 @@ function toCsv(report) {
 module.exports = {
     build: build,
     toCsv: toCsv,
-    priorityFor: priorityFor
+    catalogStatus: catalogStatus
 };
