@@ -159,6 +159,7 @@
                                     data-sku="${product.id}"
                                     data-token-url="${URLUtils.url('WaitList-Token')}"
                                     data-subscribe-url="${URLUtils.url('WaitList-Subscribe')}"
+                                    data-before-login-url="${URLUtils.url('WaitList-BeforeLogin')}"
                                     data-login-url="${URLUtils.url('Login-Show')}">
                                     Notify me when back in stock
                                 </button>
@@ -174,8 +175,20 @@
                             var msgEl = block.querySelector('.waitlist-notify-msg');
                             var LABEL = 'Notify me when back in stock';
                             function setMsg(t) { if (msgEl) { msgEl.textContent = t; } }
-                            function toLogin(j) {
-                                window.location.href = (j && j.redirectUrl) || btn.getAttribute('data-login-url');
+                            function toLogin() {
+                                // Route the guest through WaitList-BeforeLogin with the resolved
+                                // SKU so the server can stash this PDP as the post-login return
+                                // target (built server-side from the SKU -> no open redirect).
+                                // After login they land back here instead of the account page.
+                                var beforeUrl = btn.getAttribute('data-before-login-url');
+                                if (beforeUrl) {
+                                    var sku = btn.getAttribute('data-sku');
+                                    window.location.href = beforeUrl
+                                        + (beforeUrl.indexOf('?') === -1 ? '?' : '&')
+                                        + 'sku=' + encodeURIComponent(sku);
+                                } else {
+                                    window.location.href = btn.getAttribute('data-login-url');
+                                }
                             }
                             function resetButton() {
                                 btn.disabled = false;
@@ -198,7 +211,7 @@
                                     }).then(function (r) {
                                         return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j }; });
                                     }).then(function (res) {
-                                        if (res.status === 401 || res.j.loggedin === false || !res.j.token) { toLogin(res.j); return null; }
+                                        if (res.status === 401 || res.j.loggedin === false || !res.j.token) { toLogin(); return null; }
                                         var name = res.j.tokenName || 'csrf_token';
                                         var body = 'sku=' + encodeURIComponent(sku) + '&' + encodeURIComponent(name) + '=' + encodeURIComponent(res.j.token);
                                         return fetch(btn.getAttribute('data-subscribe-url'), {
@@ -211,7 +224,7 @@
                                     }).then(function (res) {
                                         if (!res) { return; }
                                         var j = res.j || {};
-                                        if (res.status === 401 || j.loggedin === false) { toLogin(j); return; }
+                                        if (res.status === 401 || j.loggedin === false) { toLogin(); return; }
                                         if (j.success) {
                                             btn.textContent = (j.status === 'already-subscribed') ? 'Already on the waitlist' : 'On the waitlist ✓';
                                             setMsg(j.status === 'already-subscribed'

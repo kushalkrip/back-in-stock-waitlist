@@ -24,6 +24,7 @@ var userLoggedIn = require('*/cartridge/scripts/middleware/userLoggedIn');
 var CustomObjectMgr = require('dw/object/CustomObjectMgr');
 var Transaction = require('dw/system/Transaction');
 var Calendar = require('dw/util/Calendar');
+var URLUtils = require('dw/web/URLUtils');
 
 var OBJECT_TYPE = 'WaitlistSubscription';
 
@@ -118,6 +119,31 @@ server.get(
     function (req, res, next) {
         var csrf = res.getViewData().csrf || {};
         res.json({tokenName: csrf.tokenName || 'csrf_token', token: csrf.token});
+        return next();
+    }
+);
+
+// Guest entry point for the PDP "Notify Me" button. A guest can't subscribe
+// (registered-users-only, see HLD DECISIONS LOCKED #2), so the button sends them
+// here instead of straight to Login-Show. We stash the originating PDP as a
+// post-login return target, then hand off to the standard login page. After a
+// successful login/registration, accountHelpers.getLoginRedirectURL (overridden
+// in this cartridge) sends them back to that PDP rather than the account
+// dashboard.
+//
+// Open-redirect safety: the return URL is built SERVER-SIDE from the sku via
+// URLUtils.url('Product-Show', ...). The client only supplies a sku; it can
+// never supply an arbitrary redirect target.
+server.get(
+    'BeforeLogin',
+    server.middleware.https,
+    function (req, res, next) {
+        var sku = (req.querystring.sku || '').trim();
+        if (sku) {
+            var target = URLUtils.url('Product-Show', 'pid', sku).relative().toString();
+            req.session.privacyCache.set('waitlistReturnUrl', target);
+        }
+        res.redirect(URLUtils.url('Login-Show'));
         return next();
     }
 );

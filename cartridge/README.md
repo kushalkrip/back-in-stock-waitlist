@@ -234,6 +234,17 @@ route. If you already override `product/productDetails.isml`, merge the ~30-line
 waitlist block (after `prices-add-to-cart-actions`) plus the inline `<script>` into
 your override.
 
+**Return-to-PDP after login.** A guest who clicks "Notify Me" is sent to
+`WaitList-BeforeLogin?sku=…`, which stashes the originating product page in the
+session and hands off to the standard login. After login/registration the shopper
+lands **back on that PDP** instead of the account dashboard. This is done by an
+`accountHelpers.getLoginRedirectURL` override (`module.superModule`) that prefers a
+`waitlistReturnUrl` stash; the URL is built **server-side from the SKU**
+(`URLUtils.url('Product-Show', …)`), never from client input, so there is no
+open-redirect surface, and normal logins (no stash) fall through to base behavior
+unchanged. Because it's a superModule override, it composes with any existing
+`accountHelpers` override as long as `app_waitlist` is on the cartridge path.
+
 ---
 
 ## Resilience (the design centerpiece)
