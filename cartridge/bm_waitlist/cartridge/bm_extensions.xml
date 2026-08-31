@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<extensions xmlns="http://www.demandware.com/xml/bmmodules/2007-12-11"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://www.demandware.com/xml/bmmodules/2007-12-11 bmext.xsd">
+    <!--
+        Adds "Waitlist Demand Report" under Merchant Tools > Products and Catalogs
+        (menupath="prod-cat", site="true" so it is site-scoped like the data it reads).
+        Wires to controller WaitlistReport.js: node Start renders the page, node
+        Export streams the CSV. Both nodes MUST be registered in <sub-pipelines> or
+        the platform 403s the request. position is high so it sorts to the bottom of
+        the group (core BM ids use 2000-12000); the id is prefixed to avoid ever
+        colliding with a core menu id.
+    -->
+    <menuaction id="waitlist-demand-report" menupath="prod-cat" position="99999" site="true">
+        <name xml:lang="x-default">Waitlist Demand Report</name>
+        <short_description xml:lang="x-default">Back-in-stock demand by SKU</short_description>
+        <description xml:lang="x-default">Ranked out-of-stock demand from back-in-stock waitlist signups, aggregated across SFRA and PWA.</description>
+        <exec pipeline="WaitlistReport" node="Start"/>
+        <sub-pipelines>
+            <pipeline name="WaitlistReport-Start"/>
+            <pipeline name="WaitlistReport-Export"/>
+        </sub-pipelines>
+    </menuaction>
+</extensions>

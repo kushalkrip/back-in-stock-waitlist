@@ -1,8 +1,15 @@
 # Notify Me / Back-In-Stock — UI/UX Design Spec
 
-Status: **DESIGN ONLY — not implemented.** This document specifies behavior, states,
-copy, and component boundaries for review. No production component in
-`overrides/app/components/` should change as a result of this file.
+Status: **Shopper PDP UI (§§1–13) is DESIGN ONLY — not implemented.** This portion
+specifies behavior, states, copy, and component boundaries for review; no production
+component in `overrides/app/components/` should change as a result of it.
+
+> **The merchant-facing surface (§14) IS BUILT (2026-08-31).** In contrast to the
+> shopper PDP spec above, the Business Manager *Waitlist Demand Report* — a `bm_waitlist`
+> extension cartridge (BM page + CSV download) plus a scheduled CSV export job, both over
+> a shared `waitlistDemand` aggregation module — is implemented, unit-tested, and deployed
+> to `zzft-025`. See §14 for the built UI. It reads persisted `WaitlistSubscription` rows
+> and is channel-agnostic (SFRA + PWA write identical rows via the shared subscribe helper).
 
 > **Product decisions LOCKED (2026-08-28, confirmed by Kushal).** This doc is now the
 > single canonical UI spec (the earlier `UI-SPEC.md` was merged into this and removed).
@@ -793,3 +800,118 @@ Grounded in `overrides/app/components/notify-me/index.jsx`'s own doc comment plu
   per-SKU caps remain a sensible backend defense-in-depth, specified in the HLD, not here.
 - Localization of the actual outbound "it's back in stock" email content — this spec covers
   only the PDP form's own copy.
+
+---
+
+## 14. Merchant-facing surface — Business Manager Waitlist Demand Report (BUILT 2026-08-31)
+
+Everything above (§§1–13) is the *shopper* PDP experience. This section is the *merchant*
+experience, and unlike the shopper spec it is **built, unit-tested, and deployed to
+`zzft-025`**. It answers the operational question the shopper flow creates — "which
+out-of-stock SKUs should I reorder, and how many people are waiting?" — which the native
+BM tooling cannot: the platform Custom Object list view shows only the opaque `sha256`
+key column (SKU and counts are invisible), and Reports & Dashboards cannot aggregate an
+arbitrary custom object.
+
+### 14.1 What was built
+
+Three pieces, one shared code path:
+
+| Piece | File | Role |
+|---|---|---|
+| Shared aggregation | `cartridge/app_waitlist/cartridge/scripts/helpers/waitlistDemand.js` | Single source of truth: reads all `WaitlistSubscription` rows, groups by variant SKU, joins live stock, ranks by restock priority. `build()` + `toCsv()`. |
+| BM page + CSV download | `cartridge/bm_waitlist/` (`bm_extensions.xml`, `controllers/WaitlistReport.js`, `templates/.../extensions/waitlist/report.isml`) | Merchant Tools menu entry rendering the ranked table; a "Download CSV" link streams the same data. |
+| Scheduled export job | `cartridge/app_waitlist/cartridge/scripts/steps/waitlistDemandReport.js` + `steptypes.json` (`custom.WaitlistDemandReport`) | Writes `waitlist-demand-<site>-<stamp>.csv` to IMPEX on a schedule for downstream/ERP pickup. |
+
+Because both the page and the job call the *same* `waitlistDemand.build()`, the on-screen
+table and the exported CSV can never diverge. And because the aggregation reads persisted
+rows (written identically by the SFRA controller and the PWA SCAPI endpoint via the shared
+`waitlistSubscribe` helper), the report is **channel-agnostic** — it is blind to whether a
+given signup came from the SFRA storefront or the PWA.
+
+### 14.2 The report is READ-ONLY (design decision)
+
+The BM page deliberately has **no "notify everyone now" / "send emails" button.** It
+surfaces demand and ranks it; the actual notification send stays owned by the existing
+notify job. Rationale: (1) a one-click mass-notify on a merchant page is an easy way to
+fire thousands of emails by accident; (2) mixing a read surface (demand insight) with a
+write surface (bulk send) invites exactly that mistake. Merchants read here and act
+through the normal, rate-controlled job pipeline.
+
+### 14.3 Placement & access
+
+- **Menu:** Merchant Tools › Products and Catalogs (`menupath="prod-cat"`, `site="true"`),
+  sorted to the bottom (`position="99999"`). Registered as a `<menuaction>` in
+  `bm_extensions.xml`; the `WaitlistReport-Start` and `WaitlistReport-Export` nodes are
+  both declared in `<sub-pipelines>` (unregistered nodes are 403'd by the platform).
+- **Access control:** every controller entry point gates on `session.userAuthenticated`
+  (returns 403 otherwise) as defence-in-depth on top of the BM module/role grant.
+- **Cartridge path:** the BM site path is `bm_waitlist:app_waitlist` — `app_waitlist` must
+  also be on the BM path so the controller's `require('*/cartridge/scripts/helpers/waitlistDemand')`
+  resolves (the shared module physically lives in `app_waitlist`).
+
+### 14.4 Priority ranking (what the badge column means)
+
+`priorityFor(counts, inStock, productExists)` classifies each SKU; rows sort by rank →
+waiting-count desc → SKU:
+
+| Badge | Condition | Meaning for the merchant |
+|---|---|---|
+| `REVIEW` | product no longer resolves (`!productExists`) | Data hygiene — a subscription points at a deleted/offline product. |
+| `HIGH` | out of stock, `waiting ≥ 10` | Reorder first. |
+| `MEDIUM` | out of stock, `waiting ≥ 3` | Reorder soon. |
+| `LOW` | out of stock, `waiting ≥ 1` | Some latent demand. |
+| `IN_STOCK` | product currently in stock | Notify job should be draining these; shown for completeness. |
+| `NONE` | out of stock, `waiting = 0` | Only historical/notified rows remain. |
+
+The summary cards at the top surface the single most actionable number first —
+**"Restock now"** = `oosWithDemand` (SKUs that are out of stock *and* have someone waiting)
+— alongside total shoppers waiting, SKUs tracked, and already-notified counts.
+
+### 14.5 BM page wireframe (as built)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Waitlist Demand Report                                                      │
+│ Back-in-stock signups aggregated by variant SKU across SFRA and PWA.        │
+│ Generated <timestamp>.                                                      │
+│                                                                             │
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                        │
+│ │   4      │ │   37     │ │   12     │ │   8      │                        │
+│ │ RESTOCK  │ │ SHOPPERS │ │  SKUS    │ │ ALREADY  │                        │
+│ │  NOW     │ │ WAITING  │ │ TRACKED  │ │ NOTIFIED │                        │
+│ └──────────┘ └──────────┘ └──────────┘ └──────────┘                        │
+│                                                                             │
+│ [ Download CSV ]                                                            │
+│                                                                             │
+│ ┌──────────┬──────────┬──────────────┬───────────┬───────┬────────┬──────┐ │
+│ │ PRIORITY │ SKU      │ PRODUCT      │ STOCK     │WAITING│NOTIFIED│FAILED│ │
+│ ├──────────┼──────────┼──────────────┼───────────┼───────┼────────┼──────┤ │
+│ │ [HIGH]   │ SKU-9-BLK│ Aria Boot 9  │ Out of st.│  14   │   0    │  0   │ │
+│ │ [MEDIUM] │ SKU-7-RED│ Vera Tee 7   │ Out of st.│   5   │   0    │  1   │ │
+│ │ [LOW]    │ SKU-3-GRN│ Nova Cap     │ Out of st.│   1   │   0    │  0   │ │
+│ │ [REVIEW] │ SKU-X    │ SKU-X (offl.)│ Out of st.│   2   │   0    │  0   │ │
+│ │ [IN_STK] │ SKU-1-BLU│ Base Tee 1   │ In stock  │   0   │   6    │  0   │ │
+│ └──────────┴──────────┴──────────────┴───────────┴───────┴────────┴──────┘ │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+Empty state ("No waitlist subscriptions yet…") and an error state (build failure surfaced
+as `report.error`) are both handled in the ISML. Styling is inline SLDS-flavoured CSS
+(no external asset dependency in the BM chrome).
+
+### 14.6 CSV contract (page download + scheduled job — identical)
+
+Header row: `SKU,Product,Waiting,Notified,Failed,InStock,Priority`. One row per SKU, RFC-4180
+quoting (embedded commas/quotes doubled). The page's "Download CSV" link and the scheduled
+`custom.WaitlistDemandReport` job produce byte-identical output because both call
+`waitlistDemand.toCsv(build())`. The job writes to IMPEX (`waitlist-demand-<siteId>-<yyyyMMdd-HHmmss>.csv`),
+configurable via `OutputFolder` / `Threshold` step parameters.
+
+### 14.7 Testing
+
+`waitlistDemand`'s ranking/counting/CSV logic is pinned by a dedicated unit suite
+(`test/unit/scripts/waitlistDemand.test.js`, 7 cases) that stubs `CustomObjectMgr` and
+`ProductMgr` via proxyquire — no instance required. It covers the full priority ladder,
+SKU grouping + status counts, iterator close, OOS-before-in-stock ranking, the REVIEW path
+for a missing product, and RFC-4180 CSV quoting. The whole cartridge unit suite is green.

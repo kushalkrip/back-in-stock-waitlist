@@ -69,6 +69,18 @@ text below (esp. §7, §8, §12) hedges, **these decisions win:**
      into one `scripts/` include both call (closes §12 gap #6).
    - **Partial-restock reservation counter** — track units-claimed-this-run so a
      thin restock cannot over-notify (closes §8 partial-restock gap / §12 gap #3).
+6. **Merchant demand-report layer — BUILT (2026-08-31), supersedes the "raw BM
+   Custom Object list view" stopgap.** Deliverable 3 is now a real merchant surface,
+   not a framing of the auto-generated CO grid (which only renders the opaque
+   sha256 key column, so the SKU/count were never visible there). Built as three
+   pieces sharing ONE aggregation code path: (a) a channel-agnostic
+   `scripts/helpers/waitlistDemand.js` module (group `WaitlistSubscription` rows by
+   `productID`, count by status, join live availability, rank OOS-with-demand
+   first); (b) a `bm_waitlist` BM extension cartridge rendering a ranked table +
+   CSV download under Merchant Tools › Products and Catalogs; (c) a
+   `custom.WaitlistDemandReport` job step that writes the same ranked CSV to IMPEX
+   on a schedule. Read-only by design (no send-triggering action on the page). See
+   §5A.
 
 ### ENVIRONMENT & DEPENDENCY STATUS (confirmed 2026-08-29)
 
@@ -123,6 +135,11 @@ below (esp. §1 non-goals, §12 gap #7).
 | SFRA parity controller | `back-in-stock-cartridge/app_waitlist/cartridge/controllers/WaitList.js` |
 | Custom Object schema (XML) | `back-in-stock-cartridge/metadata/back_in_stock/meta/custom-objecttype-definitions.xml` |
 | Job step registration | `back-in-stock-cartridge/app_waitlist/steptypes.json` |
+| Merchant demand aggregation (shared) | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/helpers/waitlistDemand.js` |
+| Demand-report export job step | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/steps/waitlistDemandReport.js` |
+| BM extension registration | `back-in-stock-cartridge/bm_waitlist/cartridge/bm_extensions.xml` |
+| BM report controller | `back-in-stock-cartridge/bm_waitlist/cartridge/controllers/WaitlistReport.js` |
+| BM report template | `back-in-stock-cartridge/bm_waitlist/cartridge/templates/default/extensions/waitlist/report.isml` |
 | PWA Notify Me component | `waitlist-storefront/overrides/app/components/notify-me/index.jsx` |
 | PWA PDP integration | `waitlist-storefront/overrides/app/components/product-view/index.jsx` |
 | Original blueprint (reshaped below) | `back-in-stock-assignment.md` |
@@ -178,14 +195,18 @@ endpoint, a Custom Object, a scheduled chunk job, and the Services framework.
 - **Single sandbox, single site.** No multi-site/multi-locale campaign
   logic beyond carrying a `locale` string through to the payload. No
   cross-instance replication story.
-- **Merchant-facing surface = the stock BM Custom Object list view, framed as a
-  demand signal.** The demo's *required* merchant-facing half (deliverable 3) is
-  served by Business Manager's auto-generated Custom Object list/detail view:
-  filtering `WaitlistSubscription` by `productID` / `status` shows *"N shoppers
-  waiting on SKU X"* — exactly the signal a merchandiser uses to size a restock.
-  No custom BM cartridge UI is built. A dedicated `bm_waitlist` dashboard
-  cartridge (aggregated waiters-per-SKU, one-click run-notify, export) is
-  **future work under the cut-line** — named, not built.
+- **Merchant-facing surface = a purpose-built BM demand-report page + CSV export
+  (BUILT 2026-08-31).** The demo's *required* merchant-facing half (deliverable 3)
+  is served by a dedicated `bm_waitlist` Business Manager extension cartridge that
+  renders a ranked *waiters-per-SKU* table under **Merchant Tools › Products and
+  Catalogs › Waitlist Demand Report**, plus a schedulable job step that writes the
+  same ranked data to IMPEX as CSV. Both consume one shared aggregation module.
+  This **supersedes** the earlier stopgap of reading the raw BM Custom Object list
+  view (whose grid only ever shows the opaque sha256 key column — see §3 key
+  strategy — so a merchandiser could never see the SKU/count there without opening
+  each record). See **§5A** for the full design. (What remains under the cut-line
+  is a *write* action from that page — one-click "run notify now" — named, not
+  built: the report is read-only by design so it can't accidentally fire sends.)
 - **No unsubscribe / preference center in the built scope — but documented as an
   identified edge case (deliverable 4).** The brief doesn't require it, so no
   preference center is built and a subscriber can't self-remove a row in this
@@ -594,6 +615,92 @@ accepted risk in Section 8/12, not hidden.
 
 ---
 
+## 5A. Merchant demand report — BM page + shared module + export job (deliverable 3)
+
+**Built 2026-08-31.** Deliverable 3 asks for a merchant-facing way to see demand.
+The honest constraint that shaped this: **Business Manager's auto-generated Custom
+Object list view only ever renders the object's *key* column** (plus scope / last-
+modified / expiry). Our key is `sha256(email|sku)` (§3), so that grid shows a wall
+of opaque hashes — a merchandiser cannot see *which SKU* or *how many waiters* there
+without opening each record one at a time, and there is no native GROUP-BY /
+aggregation over custom objects (confirmed: native Reports & Dashboards aggregate
+predefined sales/traffic feeds only, not arbitrary COs). So a purpose-built surface
+is required, not optional polish.
+
+### Design: one aggregation, two surfaces
+
+```
+                       scripts/helpers/waitlistDemand.js   (dw/* only; BM-safe)
+                       build(): group by productID, count by status,
+                       join ProductMgr availability, rank, priority
+                          ▲                              ▲
+                          │ require('*/…/waitlistDemand')│
+        ┌─────────────────┴───────┐        ┌─────────────┴───────────────┐
+        │ bm_waitlist (BM cart.)  │        │ app_waitlist job step        │
+        │ WaitlistReport.js       │        │ steps/waitlistDemandReport.js│
+        │  Start → ISML table     │        │  execute → CSV to IMPEX      │
+        │  Export → CSV download  │        │  (schedulable / BI feed)     │
+        └─────────────────────────┘        └──────────────────────────────┘
+```
+
+The **shared module is the whole point**: the live BM page and the scheduled CSV
+export can never disagree on how demand is counted or ranked because they call the
+same `build()`. It uses only server-side `dw/*` APIs (`CustomObjectMgr`,
+`ProductMgr`), so it is safe to run in the BM controller context, the job context,
+and unit tests alike.
+
+- **Aggregation (`waitlistDemand.build`)** — `CustomObjectMgr.getAllCustomObjects`
+  is iterated **once** (no GROUP BY exists) and tallied into a `Map<sku, {waiting,
+  notified, failed, total}>` keyed on `custom.productID`. For each SKU it joins live
+  availability via `ProductMgr.getProduct(sku).getAvailabilityModel().isInStock()`
+  and assigns a restock **priority**: `IN_STOCK` (available now — the notify job will
+  drain it), `HIGH`/`MEDIUM`/`LOW` (out of stock, by waiting count ≥10/≥3/≥1),
+  `REVIEW` (product no longer resolves — offline/deleted), `NONE` (only fulfilled/
+  failed rows remain). Rows are ranked **actionable-restock-first**: priority, then
+  waiting count desc, then SKU for a stable order. The iterator is always closed.
+- **Channel-agnostic by construction.** The SFRA controller and the PWA SCAPI
+  endpoint both write the identical `WaitlistSubscription` row via the shared
+  `waitlistSubscribe` helper, so this reader neither knows nor cares which storefront
+  produced a row — it aggregates persisted data only. That is what makes one report
+  correct for both SFRA and PWA (the original research question behind this build).
+- **BM surface (`bm_waitlist`).** A standard BM extension cartridge
+  (`bm_extensions.xml`, namespace `bmmodules/2007-12-11`) registers a `menuaction`
+  under **Merchant Tools › Products and Catalogs** (`menupath="prod-cat"`,
+  `site="true"` so it is site-scoped like the data). It wires to controller
+  `WaitlistReport.js`: node `Start` renders `extensions/waitlist/report.isml`
+  (MenuFrame-decorated summary cards + ranked, colour-coded table), node `Export`
+  streams the same data as a CSV download. Both nodes are registered in
+  `<sub-pipelines>` (else the platform 403s) and gated on `session.userAuthenticated`
+  (defence in depth on top of the BM module grant). Deployment: `bm_waitlist` +
+  `app_waitlist` both on the **Business Manager site's cartridge path**
+  (`bm_waitlist:app_waitlist`) so the `*/` lookup resolves the shared module; the
+  module is then granted per role under Administration › Roles › Business Manager
+  Modules.
+- **Export surface (job step).** `custom.WaitlistDemandReport`
+  (`script-module-step`, site-context, registered in `steptypes.json`) calls the
+  same `build()` + `toCsv()` and writes `waitlist-demand-<site>-<stamp>.csv` under
+  `IMPEX/src/reports/waitlist` (folder + threshold are BM job parameters). This is
+  the schedulable / BI-pipeline path; the BM page is the ad-hoc live view.
+
+### Why read-only (no "run notify now" button)
+
+The page deliberately has **no** action that triggers sends. Firing the notify job
+is an inventory-gated, transactional operation (§5); putting a one-click trigger on a
+report invites accidental mass-notification and mixes a read surface with a write
+surface. Running notify stays a proper Job (scheduled or run from BM Jobs). A guarded
+"run now" action is named as future work, not built.
+
+### Testing
+
+`waitlistDemand` has direct `mocha`/`sinon`/`proxyquire` unit coverage
+(`test/unit/scripts/waitlistDemand.test.js`, stubbing `CustomObjectMgr`/`ProductMgr`):
+status tallying, the priority ladder, OOS-first ranking, the offline-product
+`REVIEW` path, iterator-close hygiene, and RFC-4180 CSV quoting. Because both
+surfaces call `build()`, that one suite covers the counting/ranking logic behind the
+BM page and the export job at once — see §13.
+
+---
+
 ## 6. Service framework integration
 
 `waitlistNotifyService.js` registers a `dw/svc/LocalServiceRegistry` HTTP
@@ -961,11 +1068,13 @@ against what the actual code in this workspace does today:
    subscriptions for the same address are genuinely the same person. The row
    still keys on `sha256(email|sku)` rather than `customerId|sku` because the
    *notification* needs the address regardless; keying on customer ID would just
-   add a second lookup to get the email back. The remaining gap is that there is
-   **no read/list or unsubscribe endpoint** — only create — so a shopper cannot
-   yet see "my active waitlist subscriptions." If self-service management is in
-   scope it needs a net-new read + delete surface (naturally scoped to the
-   authenticated customer now that identity is server-known), unbuilt today.
+   add a second lookup to get the email back. **Merchant-side read now exists** (the
+   §5A demand report + CSV export aggregate all rows for a merchandiser). The
+   remaining gap is **shopper-facing** self-service: there is no per-shopper read/
+   list or unsubscribe endpoint — only create — so a shopper cannot yet see or
+   remove "my active waitlist subscriptions." If self-service management is in scope
+   it needs a net-new read + delete surface (naturally scoped to the authenticated
+   customer now that identity is server-known), unbuilt today.
 6. **Business-logic duplication between `script.js` and `WaitList.js`.** The
    two write paths currently duplicate the validation regex, the key
    derivation call, and the `Transaction.wrap` create logic rather than
@@ -1038,7 +1147,7 @@ case list and commands.
 
 | Tier | Tooling | Target | What it proves |
 |---|---|---|---|
-| **Cartridge unit** | `mocha` + `sinon` + `proxyquire` (mocking `dw/*`) | `waitlistKey.js`, `rest-apis/waitlist/script.js` (`joinWaitlist`), `scripts/steps/notifyWaitlist.js`, `scripts/services/waitlistNotifyService.js` | Business logic in isolation: hash determinism/collision-safety; validation + dedupe branch; the job's `PENDING→NOTIFIED/FAILED` transitions and the "leave PENDING on transient failure" branch; service `createRequest`/`parseResponse`/`mockCall`. This is where the resilience edge cases (§8) get direct coverage. |
+| **Cartridge unit** | `mocha` + `sinon` + `proxyquire` (mocking `dw/*`) | `waitlistKey.js`, `rest-apis/waitlist/script.js` (`joinWaitlist`), `controllers/WaitList.js`, `scripts/steps/notifyWaitlist.js`, `scripts/services/waitlistNotifyService.js`, `scripts/helpers/waitlistDemand.js` | Business logic in isolation: hash determinism/collision-safety; validation + dedupe branch; the SFRA route wiring + server-derived-email contract; the job's `PENDING→NOTIFIED/FAILED` transitions and the "leave PENDING on transient failure" branch; service `createRequest`/`parseResponse`/`mockCall`; and the demand report's status tallying, priority ladder, OOS-first ranking, and CSV quoting (§5A). This is where the resilience edge cases (§8) get direct coverage. |
 | **PWA component** | **Jest** + React Testing Library (`pwa-kit-dev test`, already wired as `npm test`) | `overrides/app/components/notify-me/index.jsx`, `overrides/app/components/product-view/index.jsx` | The UI state machine (§7 / UI-DESIGN): checking→idle→sending→done, idle→sending→error, the already-subscribed branch (from a pre-seeded `localStorage` hint on mount AND from an idempotent POST), the skeleton/guest/registered identity branches, and the Add-to-Cart↔Notify-Me swap under in-stock vs OOS props. `submitLive` and the "no status GET on mount" guarantee are tested with a mocked `fetch`; `MOCK_MODE` otherwise. |
 | **E2E (optional)** | **Playwright** | Local `npm start` server | One happy-path spec: PDP with `?forceOOS=1` → Notify-Me renders → fill email → submit → success state. Breadth-proof over the full render/route stack; depth stays in the Jest suite. If time-boxed out, the README states so and notes Jest carries the behavioural coverage. |
 

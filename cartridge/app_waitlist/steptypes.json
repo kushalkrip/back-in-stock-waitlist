@@ -1,5 +1,41 @@
 {
     "step-types": {
+        "script-module-step": [
+            {
+                "@type-id": "custom.WaitlistDemandReport",
+                "@supports-parallel-execution": "false",
+                "@supports-site-context": "true",
+                "@supports-organization-context": "false",
+                "description": "Aggregate waitlist subscriptions into a ranked per-SKU demand CSV in IMPEX.",
+                "module": "app_waitlist/cartridge/scripts/steps/waitlistDemandReport.js",
+                "function": "execute",
+                "transactional": "false",
+                "timeout-in-seconds": "900",
+                "parameters": {
+                    "parameter": [
+                        {
+                            "@name": "OutputFolder",
+                            "@type": "string",
+                            "@required": false,
+                            "description": "IMPEX-relative output folder. Default src/reports/waitlist."
+                        },
+                        {
+                            "@name": "Threshold",
+                            "@type": "long",
+                            "@required": false,
+                            "description": "Available-to-sell quantity counted as in-stock. Default 1.",
+                            "min-value": "1"
+                        }
+                    ]
+                },
+                "status-codes": {
+                    "status": [
+                        { "@code": "OK", "description": "Report written." },
+                        { "@code": "ERROR", "description": "Report failed." }
+                    ]
+                }
+            }
+        ],
         "chunk-script-module-step": [
             {
                 "@type-id": "custom.WaitlistNotifyStep",

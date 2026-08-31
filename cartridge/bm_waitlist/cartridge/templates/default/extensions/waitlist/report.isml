@@ -1,0 +1,110 @@
+<iscontent type="text/html" charset="UTF-8" compact="true"/>
+<isdecorate template="application/MenuFrame">
+    <isinclude template="inc/Modules"/>
+
+    <isscript>
+        var URLUtils = require('dw/web/URLUtils');
+        var report = pdict.report;
+        var totals = report.totals || {};
+    </isscript>
+
+    <style type="text/css">
+        .wl-wrap { padding: 16px 24px; font-family: Arial, Helvetica, sans-serif; color: #16325c; }
+        .wl-wrap h1 { font-size: 20px; margin: 0 0 4px; }
+        .wl-sub { color: #54698d; font-size: 12px; margin-bottom: 16px; }
+        .wl-cards { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+        .wl-card { border: 1px solid #d8dde6; border-radius: 4px; padding: 10px 16px; min-width: 120px; background: #f7f9fb; }
+        .wl-card .n { font-size: 22px; font-weight: bold; display: block; }
+        .wl-card .l { font-size: 11px; text-transform: uppercase; color: #54698d; letter-spacing: .04em; }
+        .wl-card.alert .n { color: #c23934; }
+        .wl-actions { margin-bottom: 12px; }
+        .wl-btn { display: inline-block; background: #0070d2; color: #fff; text-decoration: none; padding: 7px 14px; border-radius: 4px; font-size: 13px; }
+        .wl-btn:hover { background: #005fb2; }
+        table.wl { border-collapse: collapse; width: 100%; font-size: 13px; }
+        table.wl th, table.wl td { border: 1px solid #d8dde6; padding: 7px 10px; text-align: left; }
+        table.wl th { background: #eef1f6; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #54698d; }
+        table.wl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
+        .badge.HIGH { background: #c23934; color: #fff; }
+        .badge.MEDIUM { background: #ffb75d; color: #3e2c00; }
+        .badge.LOW { background: #ffe9a8; color: #3e3200; }
+        .badge.REVIEW { background: #706e6b; color: #fff; }
+        .badge.IN_STOCK { background: #04844b; color: #fff; }
+        .badge.NONE { background: #e0e5ee; color: #54698d; }
+        .stock-no { color: #c23934; font-weight: bold; }
+        .stock-yes { color: #04844b; }
+        .wl-empty, .wl-error { padding: 20px; border: 1px dashed #d8dde6; border-radius: 4px; color: #54698d; }
+        .wl-error { border-color: #c23934; color: #c23934; }
+    </style>
+
+    <div class="wl-wrap">
+        <h1>Waitlist Demand Report</h1>
+        <div class="wl-sub">
+            Back-in-stock signups aggregated by variant SKU across SFRA and PWA storefronts.
+            Generated ${report.generatedAt}.
+        </div>
+
+        <isif condition="${!empty(report.error)}">
+            <div class="wl-error">Could not build the report: ${report.error}</div>
+        <iselse/>
+            <div class="wl-cards">
+                <div class="wl-card alert">
+                    <span class="n">${totals.oosWithDemand}</span>
+                    <span class="l">Restock now</span>
+                </div>
+                <div class="wl-card">
+                    <span class="n">${totals.waiting}</span>
+                    <span class="l">Shoppers waiting</span>
+                </div>
+                <div class="wl-card">
+                    <span class="n">${totals.skus}</span>
+                    <span class="l">SKUs tracked</span>
+                </div>
+                <div class="wl-card">
+                    <span class="n">${totals.notified}</span>
+                    <span class="l">Already notified</span>
+                </div>
+            </div>
+
+            <div class="wl-actions">
+                <a class="wl-btn" href="${URLUtils.url('WaitlistReport-Export')}">Download CSV</a>
+            </div>
+
+            <isif condition="${report.rows.length === 0}">
+                <div class="wl-empty">No waitlist subscriptions yet. Once shoppers tap "Notify me" on an out-of-stock product, demand appears here.</div>
+            <iselse/>
+                <table class="wl">
+                    <thead>
+                        <tr>
+                            <th>Priority</th>
+                            <th>SKU</th>
+                            <th>Product</th>
+                            <th>Stock</th>
+                            <th class="num">Waiting</th>
+                            <th class="num">Notified</th>
+                            <th class="num">Failed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <isloop items="${report.rows}" var="r">
+                            <tr>
+                                <td><span class="badge ${r.priority}">${r.priority}</span></td>
+                                <td>${r.sku}</td>
+                                <td>
+                                    ${r.productName}
+                                    <isif condition="${!r.productExists}"> <em>(offline/deleted)</em></isif>
+                                </td>
+                                <td>
+                                    <isif condition="${r.inStock}"><span class="stock-yes">In stock</span><iselse/><span class="stock-no">Out of stock</span></isif>
+                                </td>
+                                <td class="num">${r.waiting}</td>
+                                <td class="num">${r.notified}</td>
+                                <td class="num">${r.failed}</td>
+                            </tr>
+                        </isloop>
+                    </tbody>
+                </table>
+            </isif>
+        </isif>
+    </div>
+</isdecorate>

@@ -121,6 +121,27 @@ In the `retail-react-app` template, set `config/default.js` with your `shortCode
 `organizationId` (`f_ecom_zzft_025`), `siteId`, and SLAS `clientId`; copy the two files
 from `pwa/overrides/` into the matching override paths; `npm start` → `localhost:3000`.
 
+**Two non-obvious requirements for the custom SCAPI endpoint to work from PWA:**
+1. **Custom-API paths are RELATIVE to `/organizations/{organizationId}`** — the platform
+   auto-prepends that segment. `schema.yaml` therefore uses `paths: /subscriptions:` and
+   does **not** declare an `organizationId` path parameter. Declaring the full
+   `/organizations/{organizationId}/subscriptions` path doubles the org segment and makes
+   *every* request untranslatable (client sees HTTP 404, instance log shows
+   "Custom API request couldn't be translated"). This is a correctness requirement, not
+   test plumbing — the endpoint 404s for any caller if the path is absolute.
+2. **The SLAS client must be granted the endpoint's required scope** (`c_waitlist_rw`, from
+   the schema's `security: ShopperToken: [c_waitlist_rw]`). Add it to the client via SLAS
+   Admin (`PUT .../shopper/auth-admin/v1/tenants/{tenant}/clients/{clientId}`, `scopes` as a
+   JSON array). Without the scope the endpoint returns **403** "Request path is not allowed,
+   because of missing or invalid permissions" (distinct from the 404 above).
+
+**Verified live end-to-end on WaitlistDemo (SLAS tokens, curl):**
+- Guest token → `GET getWaitlistStatus` → `200 {"subscribed":false}`; `POST joinWaitlist`
+  → `401 guest-not-allowed` (registered-only gate, proper SCAPI custom error).
+- Registered token (PKCE login) → `GET` → `200 subscribed:false` → `POST` →
+  `200 {status:"subscribed"}` → re-`POST` → `200 {status:"already-subscribed"}` (idempotent)
+  → `GET` → `200 subscribed:true`.
+
 ---
 
 ## Install on an SFRA site (step by step)

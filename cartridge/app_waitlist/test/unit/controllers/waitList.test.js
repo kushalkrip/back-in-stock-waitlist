@@ -27,6 +27,10 @@ var OBJECT_TYPE = 'WaitlistSubscription';
 // ── dw/* + middleware stubs ──────────────────────────────────────────────────
 var getCustomObject;
 var createCustomObject;
+// The shared write path (scripts/helpers/waitlistSubscribe) is stubbed: these
+// controller tests own the route wiring + email-derivation contract, while the
+// dedupe/key/status-machine is exercised in the helper's own tests.
+var subscribeStub;
 
 // A pass-through SFRA middleware (login gate / CSRF) — records that it was wired.
 function passThrough(req, res, next) {
@@ -52,11 +56,27 @@ function loadController() {
         return {custom: {}};
     });
 
+    // Default: a brand-new subscription. Individual tests override the return.
+    subscribeStub = sinon.stub().returns({success: true, status: 'subscribed'});
+
     return proxyquire('../../../cartridge/controllers/WaitList', {
         server: serverMock,
         '*/cartridge/scripts/middleware/csrf': csrfStub,
         '*/cartridge/scripts/middleware/userLoggedIn': userLoggedInStub,
         '*/cartridge/scripts/util/waitlistKey': waitlistKeyStub,
+        '*/cartridge/scripts/helpers/waitlistSubscribe': {
+            subscribe: function () { return subscribeStub.apply(null, arguments); }
+        },
+        'dw/web/URLUtils': {
+            // Chainable stub mirroring URLUtils.url(...).relative().toString().
+            url: function url() {
+                var args = Array.prototype.slice.call(arguments);
+                return {
+                    relative: function relative() { return this; },
+                    toString: function toString() { return '/' + args.join('/'); }
+                };
+            }
+        },
         'dw/object/CustomObjectMgr': {
             getCustomObject: function () {
                 return getCustomObject.apply(null, arguments);
@@ -132,64 +152,54 @@ describe('WaitList controller (SFRA parity route)', function () {
     });
 
     describe('Subscribe (POST)', function () {
-        it('creates a PENDING subscription for a new (email, sku) and returns subscribed', function () {
-            getCustomObject.returns(null); // nothing existing yet
+        it('delegates to the shared helper with the session email + form sku and returns subscribed', function () {
             var req = fakeReq();
             var res = fakeRes();
             var next = sinon.stub();
 
             subscribe(req, res, next);
 
-            // Keyed on the LOWERCASED account email, not the raw-cased one.
-            sinon.assert.calledWith(createCustomObject, OBJECT_TYPE, 'key(shopper@example.com|SKU-1)');
-            var co = createCustomObject.returnValues[0];
-            expect(co.custom.email).to.equal('shopper@example.com');
-            expect(co.custom.productID).to.equal('SKU-1');
-            expect(co.custom.status).to.equal('PENDING');
-            expect(co.custom.locale).to.equal('en_US');
-            expect(co.custom.attemptCount).to.equal(0);
+            // Email is server-derived + LOWERCASED; sku/locale from the request.
+            sinon.assert.calledOnceWithExactly(subscribeStub, 'shopper@example.com', 'SKU-1', 'en_US');
             expect(res.statusCode).to.equal(200);
             expect(res.body).to.deep.equal({success: true, status: 'subscribed'});
             sinon.assert.calledOnce(next);
         });
 
-        it('is idempotent: an existing row returns already-subscribed and writes nothing', function () {
-            getCustomObject.returns({custom: {}}); // already on the list
+        it('passes through the helper\'s already-subscribed result (idempotent)', function () {
+            subscribeStub.returns({success: true, status: 'already-subscribed'});
             var res = fakeRes();
 
             subscribe(fakeReq(), res, sinon.stub());
 
-            sinon.assert.notCalled(createCustomObject);
             expect(res.body).to.deep.equal({success: true, status: 'already-subscribed'});
         });
 
         it('NEVER trusts an email from the request — uses the session profile (LOCKED #2)', function () {
-            getCustomObject.returns(null);
             // The request tries to smuggle in an attacker-controlled address.
             var req = fakeReq({form: {sku: 'SKU-1', email: 'attacker@evil.com'}});
             var res = fakeRes();
 
             subscribe(req, res, sinon.stub());
 
-            var co = createCustomObject.returnValues[0];
-            expect(co.custom.email).to.equal('shopper@example.com'); // session, not body
-            sinon.assert.calledWith(createCustomObject, OBJECT_TYPE, 'key(shopper@example.com|SKU-1)');
+            // The helper only ever sees the session email, never the body one.
+            sinon.assert.calledOnceWithExactly(subscribeStub, 'shopper@example.com', 'SKU-1', 'en_US');
         });
 
-        it('rejects a missing sku with 400', function () {
+        it('maps the helper\'s invalid-sku error to 400', function () {
+            subscribeStub.returns({success: false, error: 'invalid-sku'});
             var res = fakeRes();
             subscribe(fakeReq({form: {sku: '   '}}), res, sinon.stub());
             expect(res.statusCode).to.equal(400);
             expect(res.body).to.deep.equal({success: false, error: 'invalid-sku'});
-            sinon.assert.notCalled(createCustomObject);
         });
 
-        it('rejects a session with no account email with 401', function () {
+        it('maps the helper\'s no-account-email error to 401', function () {
+            subscribeStub.returns({success: false, error: 'no-account-email'});
             var res = fakeRes();
             subscribe(fakeReq({currentCustomer: {profile: {email: ''}}}), res, sinon.stub());
             expect(res.statusCode).to.equal(401);
             expect(res.body).to.deep.equal({success: false, error: 'no-account-email'});
-            sinon.assert.notCalled(createCustomObject);
         });
     });
 

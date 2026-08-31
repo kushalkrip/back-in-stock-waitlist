@@ -15,7 +15,11 @@ servers:
       shortCode:
         default: your-short-code
 paths:
-  /organizations/{organizationId}/subscriptions:
+  # Path is RELATIVE to /organizations/{organizationId}, which the Custom API
+  # platform auto-prepends. Declaring the org segment (or its path param) here
+  # would double it and make every request untranslatable (404). The full URL is
+  #   /custom/waitlist/v1/organizations/{organizationId}/subscriptions
+  /subscriptions:
     get:
       summary: Whether the authenticated shopper is already on the waitlist for a SKU
       description: >
@@ -24,11 +28,6 @@ paths:
         status; a guest token yields subscribed:false rather than an error.
       operationId: getWaitlistStatus
       parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
         - name: siteId
           in: query
           required: true
@@ -57,11 +56,6 @@ paths:
       summary: Join the back-in-stock waitlist for a SKU
       operationId: joinWaitlist
       parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
         - name: siteId
           in: query
           required: true
