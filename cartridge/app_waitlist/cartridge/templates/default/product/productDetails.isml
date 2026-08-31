@@ -122,6 +122,19 @@
                             </div>
                         </div>
 
+                        <!--
+                            Back-In-Stock (app_waitlist) show/hide rule. wlNotify is true only
+                            when the shopper has resolved a concrete, out-of-stock unit:
+                            readyToOrder (all variation attrs chosen) AND NOT available AND not a
+                            set/bundle. Mirrors the PWA rule (docs/UI-DESIGN.md:
+                            showNotifyMe = variantResolved && isOutOfStock). Both the Add-to-Cart
+                            and the Notify block are ALWAYS rendered; we only toggle which one is
+                            visible — server-side here for the initial paint, then client-side on
+                            SFRA's ajax `product:afterAttributeSelect` so switching size/color
+                            flips them live without a page reload.
+                        -->
+                        <isset name="wlNotify" value="${product.readyToOrder && !product.available && product.productType !== 'set' && product.productType !== 'bundle'}" scope="page" />
+
                         <div class="prices-add-to-cart-actions">
                             <div class="row">
                                 <div class="col-12">
@@ -133,30 +146,14 @@
                                 </div>
                             </div>
 
-                            <!--
-                                Cart and [Optionally] Apple Pay.
-                                Back-In-Stock (app_waitlist): when the product is fully out of
-                                stock, the "Notify Me" block below REPLACES Add-to-Cart
-                                (docs/UI-DESIGN.md locked decision), so we suppress the base
-                                add-to-cart button in that case rather than showing it disabled.
-                                Sets/bundles keep the base button (a bundle back-in-stock is a
-                                separate spec).
-                            -->
-                            <isif condition="${product.available || product.productType === 'set' || product.productType === 'bundle'}">
+                            <!-- Cart and [Optionally] Apple Pay — hidden while out of stock -->
+                            <div class="js-waitlist-atc" style="<isif condition="${wlNotify}">display:none;</isif>">
                                 <isinclude template="product/components/addToCartProduct" />
-                            </isif>
+                            </div>
                         </div>
 
-                        <!--
-                            Back-In-Stock Waitlist: Notify Me (app_waitlist).
-                            Shown ONLY when the product is fully out of stock, i.e. not
-                            orderable (product.available === false) — mirrors the PWA rule
-                            (docs/UI-DESIGN.md: showNotifyMe = fully-OOS only). Sets/bundles
-                            are excluded (a bundle back-in-stock is a separate spec). When in
-                            stock, nothing renders and the base Add-to-Cart stands alone.
-                        -->
-                        <isif condition="${!product.available && product.productType !== 'set' && product.productType !== 'bundle'}">
-                        <div class="row waitlist-notify" style="margin-top:.75rem;">
+                        <!-- Back-In-Stock Waitlist: Notify Me (shown only when wlNotify) -->
+                        <div class="row waitlist-notify js-waitlist-notify-block" style="margin-top:.75rem;<isif condition="${!wlNotify}">display:none;</isif>">
                             <div class="col-12">
                                 <button type="button" class="btn btn-outline-primary btn-block js-waitlist-notify"
                                     data-sku="${product.id}"
@@ -170,52 +167,87 @@
                         </div>
                         <script>
                         (function () {
-                            var btn = document.querySelector('.js-waitlist-notify');
-                            if (!btn || btn.getAttribute('data-bound')) { return; }
-                            btn.setAttribute('data-bound', '1');
-                            var msgEl = document.querySelector('.waitlist-notify-msg');
+                            var block = document.querySelector('.js-waitlist-notify-block');
+                            var btn = block && block.querySelector('.js-waitlist-notify');
+                            var atc = document.querySelector('.js-waitlist-atc');
+                            if (!btn) { return; }
+                            var msgEl = block.querySelector('.waitlist-notify-msg');
+                            var LABEL = 'Notify me when back in stock';
                             function setMsg(t) { if (msgEl) { msgEl.textContent = t; } }
                             function toLogin(j) {
                                 window.location.href = (j && j.redirectUrl) || btn.getAttribute('data-login-url');
                             }
-                            btn.addEventListener('click', function () {
-                                btn.disabled = true;
-                                var wrap = document.querySelector('.product-detail');
-                                var sku = (wrap && wrap.getAttribute('data-pid')) || btn.getAttribute('data-sku');
-                                fetch(btn.getAttribute('data-token-url'), {
-                                    credentials: 'include',
-                                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                                }).then(function (r) {
-                                    return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j }; });
-                                }).then(function (res) {
-                                    if (res.status === 401 || res.j.loggedin === false || !res.j.token) { toLogin(res.j); return null; }
-                                    var name = res.j.tokenName || 'csrf_token';
-                                    var body = 'sku=' + encodeURIComponent(sku) + '&' + encodeURIComponent(name) + '=' + encodeURIComponent(res.j.token);
-                                    return fetch(btn.getAttribute('data-subscribe-url'), {
-                                        method: 'POST', credentials: 'include',
-                                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
-                                        body: body
+                            function resetButton() {
+                                btn.disabled = false;
+                                btn.textContent = LABEL;
+                                setMsg('');
+                            }
+
+                            // ---- Subscribe on click (token is fetched fresh; PDP is cached) ----
+                            if (!btn.getAttribute('data-bound')) {
+                                btn.setAttribute('data-bound', '1');
+                                btn.addEventListener('click', function () {
+                                    btn.disabled = true;
+                                    // The resolved variant SKU is tracked on the button itself
+                                    // (base.js updates the container pid via jQuery .data(), NOT
+                                    // the DOM attribute, so we can't read it back off the node).
+                                    var sku = btn.getAttribute('data-sku');
+                                    fetch(btn.getAttribute('data-token-url'), {
+                                        credentials: 'include',
+                                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
                                     }).then(function (r) {
                                         return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j }; });
-                                    });
-                                }).then(function (res) {
-                                    if (!res) { return; }
-                                    var j = res.j || {};
-                                    if (res.status === 401 || j.loggedin === false) { toLogin(j); return; }
-                                    if (j.success) {
-                                        btn.textContent = (j.status === 'already-subscribed') ? 'Already on the waitlist' : 'On the waitlist ✓';
-                                        setMsg(j.status === 'already-subscribed'
-                                            ? "You're already signed up — we'll email you when it's back in stock."
-                                            : "Done! We'll email you when this item is back in stock.");
-                                    } else {
-                                        setMsg('Sorry, something went wrong. Please try again.');
-                                        btn.disabled = false;
+                                    }).then(function (res) {
+                                        if (res.status === 401 || res.j.loggedin === false || !res.j.token) { toLogin(res.j); return null; }
+                                        var name = res.j.tokenName || 'csrf_token';
+                                        var body = 'sku=' + encodeURIComponent(sku) + '&' + encodeURIComponent(name) + '=' + encodeURIComponent(res.j.token);
+                                        return fetch(btn.getAttribute('data-subscribe-url'), {
+                                            method: 'POST', credentials: 'include',
+                                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                                            body: body
+                                        }).then(function (r) {
+                                            return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, j: j }; });
+                                        });
+                                    }).then(function (res) {
+                                        if (!res) { return; }
+                                        var j = res.j || {};
+                                        if (res.status === 401 || j.loggedin === false) { toLogin(j); return; }
+                                        if (j.success) {
+                                            btn.textContent = (j.status === 'already-subscribed') ? 'Already on the waitlist' : 'On the waitlist ✓';
+                                            setMsg(j.status === 'already-subscribed'
+                                                ? "You're already signed up — we'll email you when it's back in stock."
+                                                : "Done! We'll email you when this item is back in stock.");
+                                        } else {
+                                            setMsg('Sorry, something went wrong. Please try again.');
+                                            btn.disabled = false;
+                                        }
+                                    }).catch(function () { setMsg('Network error. Please try again.'); btn.disabled = false; });
+                                });
+                            }
+
+                            // ---- Live reactivity: flip Notify Me <-> Add-to-Cart on variant change ----
+                            // SFRA fires the jQuery custom event `product:afterAttributeSelect`;
+                            // native addEventListener won't receive jQuery-triggered events, so we
+                            // bind through jQuery once it has loaded (footer bundle loads after this).
+                            function attach() {
+                                if (!window.jQuery) { setTimeout(attach, 120); return; }
+                                window.jQuery('body').on('product:afterAttributeSelect', function (e, resp) {
+                                    var p = resp && resp.data && resp.data.product;
+                                    if (!p) { return; }
+                                    var isSetBundle = (p.productType === 'set' || p.productType === 'bundle');
+                                    var showNotify = !!p.readyToOrder && p.available === false && !isSetBundle;
+                                    if (block) { block.style.display = showNotify ? '' : 'none'; }
+                                    if (atc) { atc.style.display = showNotify ? 'none' : ''; }
+                                    if (showNotify && p.id && p.id !== btn.getAttribute('data-sku')) {
+                                        // New OOS variant selected — retarget and reset the button.
+                                        btn.setAttribute('data-sku', p.id);
+                                        resetButton();
                                     }
-                                }).catch(function () { setMsg('Network error. Please try again.'); btn.disabled = false; });
-                            });
+                                });
+                            }
+                            attach();
                         })();
                         </script>
-                        </isif>
 
                         <!-- Social Sharing Icons -->
                         <div class="row">
