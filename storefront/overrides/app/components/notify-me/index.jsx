@@ -46,17 +46,16 @@ import {getConfig} from '@salesforce/pwa-kit-runtime/utils/ssr-config'
  * getWaitlistStatus) exists for an account "my waitlist" view, but is
  * intentionally kept OFF the PDP critical path.
  *
- * ── LOCAL DEV ─────────────────────────────────────────────────────────────
- * The custom `/custom/waitlist` endpoint only exists on OUR sandbox (zzft-025),
- * not on the shared demo instance this app currently points at, and calling it
- * live needs a usable SLAS client (blocked — see docs/HLD.md §12). So while
- * developing against demo data we run in MOCK_MODE: submit simulates a
- * successful call. In BOTH modes the "already subscribed after refresh"
- * behaviour is driven by the local hint in localStorage (written on a
- * successful submit); the only difference is whether submit hits the real POST
- * endpoint. Set WAITLIST_LIVE=true at build time once the endpoint is deployed
- * and a real SLAS client is configured; the component then uses the real POST
- * subscribe call.
+ * ── MOCK vs LIVE ──────────────────────────────────────────────────────────
+ * The custom `/custom/waitlist` endpoint is deployed on our sandbox (zzft-025).
+ * MOCK_MODE is the default so the component runs offline / against an instance
+ * that can't host the endpoint: submit simulates a successful call. Set
+ * WAITLIST_LIVE=true and the component POSTs for real — through the PWA Kit
+ * same-origin proxy with a SLAS shopper token (client scoped for c_waitlist_rw);
+ * this path is proven end-to-end on zzft-025. In BOTH modes the "already
+ * subscribed after refresh" behaviour is driven by the local hint in
+ * localStorage (written on a successful submit); the only difference is whether
+ * submit hits the real POST endpoint.
  */
 const SCAPI_PATH = 'custom/waitlist/v1'
 

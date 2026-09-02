@@ -53,9 +53,10 @@ text below (esp. §7, §8, §12) hedges, **these decisions win:**
    waiting SKU** (not per subscription) while preserving FIFO fairness within a SKU. No
    second index object is built — a `WaitlistSku` counter object is documented as a
    scale lever (§9), not paid for up front (it adds counter-drift risk). See §5/§9.
-5. **Build ALL of the following now (not deferred to future work):**
-   - **TTL/cleanup job step** (closes §8/§9/§12 gap #2 + doubles as the
-     PII-retention control).
+5. **Build the following now (not deferred to future work) — with one explicit exception, the TTL/cleanup step, called out below:**
+   - **TTL/cleanup job step** — *design intent, NOT built in the take-home* (the
+     one item on this list left to future work; §12 gap #2 states the same). Would
+     close §8/§9/§12 gap #2 and double as the PII-retention control.
    - **Already-subscribed detection** — the custom SCAPI POST response returns a
      distinguishable `already-subscribed` status on a dedupe hit, and the PWA
      renders the distinct idempotent state (§12 gap #7 / UI-DESIGN §5.4). Across
@@ -100,25 +101,24 @@ below (esp. §1 non-goals, §12 gap #7).
   endpoint; the Custom Object; the Job; the Service; the SFRA controller; or metadata
   export. The custom API is deployed to `zzft-025` **now, independent of SLAS** — it is
   callable *with a token* the moment the code version is activated.
-- **SLAS status — blocked on Adyen, off the critical path.** Self-provisioning a client
-  via the SLAS Admin UI (`https://j1jska9w.api.commercecloud.salesforce.com/shopper/auth-admin/v1/ui/`)
-  returned **"Unauthorized – no SLAS role found"**: the candidate's Account Manager user
-  lacks the **SLAS Organization Administrator** role for tenant `zzft_025`, which only an
-  Account Administrator (Adyen) can grant. Ask sent to recruitment: (A, preferred) grant
-  that role so the candidate self-serves the client; or (B) Adyen provisions a **public**
-  client and sends the Client ID with `http://localhost:3000/callback` registered.
+- **SLAS status — RESOLVED, proven live end-to-end.** A working SLAS client is configured
+  for `zzft-025`, and the browser → custom-SCAPI shopper-token path has been exercised
+  end-to-end on the **"Waitlist Demo"** site: a registered shopper's one-tap submit reaches
+  `POST custom/waitlist/v1/.../subscriptions`, the server derives the email from the token,
+  and the row lands in the Custom Object. Two things were needed to make it work: the
+  custom-API paths must be **relative to `/organizations/{orgId}`**, and the SLAS client
+  must carry the **`c_waitlist_rw`** scope. (This was earlier blocked on the Account-Manager
+  user lacking the SLAS Organization Administrator role for tenant `zzft_025`; that has since
+  been cleared.)
 - **The SFRA controller is a *permanent* parallel path, not a temporary stand-in.** It
-  proves the identical Custom-Object write with zero SLAS (CSRF-protected) and remains in
-  the deliverable even after the PWA live path works — it is how the real write path is
-  demonstrated on `zzft-025` regardless of SLAS timing (see §4).
-- **Two-tier demo consequence:** on localhost-against-the-shared-demo-instance the PWA
-  runs in `MOCK_MODE` (no server call — the demo instance can't host our endpoint); the
-  real write path is proven on `zzft-025` via the SFRA controller and the Job (both
-  SLAS-free); the live headless-shopper token path is demoed on `localhost:3000` (whose
-  `/callback` is registered on the shared demo SLAS client) once a usable client exists.
-  The MRT hosted URL's live guest login 400s on `redirect_uri` because the shared
-  Salesforce-managed client's allowlist can't be edited to add the MRT domain — a
-  client-ownership limitation, not a code bug (see `docs/DELIVERY-PLAN.md` Appendix A.9).
+  proves the identical Custom-Object write via a CSRF-protected storefront route with zero
+  SLAS, and remains in the deliverable alongside the (now-working) PWA live path — it is how
+  the write path is demonstrated on `zzft-025` on the SFRA storefront (see §4).
+- **Demo consequence:** the live headless-shopper token path runs on `localhost:3000`
+  (routed through the PWA Kit same-origin proxy to the SCAPI host); the same write path is
+  also proven on `zzft-025` via the SFRA controller and the Job. `MOCK_MODE` remains
+  available as an offline/no-endpoint dev default (submit simulates success), gated by
+  `WAITLIST_LIVE=true`.
 - **Testing is an explicit evaluation axis.** The take-home brief's Step 2 names
   *"testing methodologies (e.g., Jest/Playwright)"* — see the new §13 Testing strategy.
 
@@ -126,22 +126,22 @@ below (esp. §1 non-goals, §12 gap #7).
 
 | Concern | File |
 |---|---|
-| Custom SCAPI endpoint impl | `back-in-stock-cartridge/app_waitlist/cartridge/rest-apis/waitlist/script.js` |
-| Custom SCAPI schema (OpenAPI) | `back-in-stock-cartridge/app_waitlist/cartridge/rest-apis/waitlist/schema.yaml` |
-| Custom SCAPI endpoint registration | `back-in-stock-cartridge/app_waitlist/cartridge/rest-apis/waitlist/api.json` |
-| Chunk job step | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/steps/notifyWaitlist.js` |
-| Outbound service definition | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/services/waitlistNotifyService.js` |
-| Dedupe key util | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/util/waitlistKey.js` |
-| SFRA parity controller | `back-in-stock-cartridge/app_waitlist/cartridge/controllers/WaitList.js` |
-| Custom Object schema (XML) | `back-in-stock-cartridge/metadata/back_in_stock/meta/custom-objecttype-definitions.xml` |
-| Job step registration | `back-in-stock-cartridge/app_waitlist/steptypes.json` |
-| Merchant demand aggregation (shared) | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/helpers/waitlistDemand.js` |
-| Demand-report export job step | `back-in-stock-cartridge/app_waitlist/cartridge/scripts/steps/waitlistDemandReport.js` |
-| BM extension registration | `back-in-stock-cartridge/bm_waitlist/cartridge/bm_extensions.xml` |
-| BM report controller | `back-in-stock-cartridge/bm_waitlist/cartridge/controllers/WaitlistReport.js` |
-| BM report template | `back-in-stock-cartridge/bm_waitlist/cartridge/templates/default/extensions/waitlist/report.isml` |
-| PWA Notify Me component | `waitlist-storefront/overrides/app/components/notify-me/index.jsx` |
-| PWA PDP integration | `waitlist-storefront/overrides/app/components/product-view/index.jsx` |
+| Custom SCAPI endpoint impl | `cartridge/app_waitlist/cartridge/rest-apis/waitlist/script.js` |
+| Custom SCAPI schema (OpenAPI) | `cartridge/app_waitlist/cartridge/rest-apis/waitlist/schema.yaml` |
+| Custom SCAPI endpoint registration | `cartridge/app_waitlist/cartridge/rest-apis/waitlist/api.json` |
+| Chunk job step | `cartridge/app_waitlist/cartridge/scripts/steps/notifyWaitlist.js` |
+| Outbound service definition | `cartridge/app_waitlist/cartridge/scripts/services/waitlistNotifyService.js` |
+| Dedupe key util | `cartridge/app_waitlist/cartridge/scripts/util/waitlistKey.js` |
+| SFRA parity controller | `cartridge/app_waitlist/cartridge/controllers/WaitList.js` |
+| Custom Object schema (XML) | `cartridge/metadata/back_in_stock/meta/custom-objecttype-definitions.xml` |
+| Job step registration | `cartridge/app_waitlist/steptypes.json` |
+| Merchant demand aggregation (shared) | `cartridge/app_waitlist/cartridge/scripts/helpers/waitlistDemand.js` |
+| Demand-report export job step | `cartridge/app_waitlist/cartridge/scripts/steps/waitlistDemandReport.js` |
+| BM extension registration | `cartridge/bm_waitlist/cartridge/bm_extensions.xml` |
+| BM report controller | `cartridge/bm_waitlist/cartridge/controllers/WaitlistReport.js` |
+| BM report template | `cartridge/bm_waitlist/cartridge/templates/default/extensions/waitlist/report.isml` |
+| PWA Notify Me component | `storefront/overrides/app/components/notify-me/index.jsx` |
+| PWA PDP integration | `storefront/overrides/app/components/product-view/index.jsx` |
 | Original blueprint (reshaped below) | `back-in-stock-assignment.md` |
 
 ---
@@ -220,14 +220,12 @@ endpoint, a Custom Object, a scheduled chunk job, and the Services framework.
   customer record** — the client never supplies an address. Guests cannot subscribe (they
   get a sign-in prompt). This is a deliberate reversal of an earlier guest-inline-email
   design; see Section 3 for the key strategy and Section 10 for the security payoff.
-- **PWA Kit component is currently wired in `MOCK_MODE`** (see
-  `overrides/app/components/notify-me/index.jsx`): it does not yet POST to a
-  real sandbox because the shared demo instance this workspace points at cannot
-  host our custom endpoint, and the live headless-shopper call to the endpoint
-  once deployed to `zzft-025` needs a usable SLAS client (blocked on Adyen — see
-  the Environment & Dependency Status block above and §12 gap #7). This HLD
-  designs the live path (`submitLive`) that the code already stubs out and gates
-  behind `WAITLIST_LIVE=true`. The endpoint deploy itself is **not** SLAS-blocked.
+- **PWA Kit live submit is proven end-to-end** (see
+  `overrides/app/components/notify-me/index.jsx`): with `WAITLIST_LIVE=true`, the registered
+  one-tap `submitLive` path POSTs to the deployed `custom/waitlist/v1` endpoint on `zzft-025`
+  through the PWA Kit same-origin proxy, using a SLAS shopper token (client scoped for
+  `c_waitlist_rw`). `MOCK_MODE` remains the default for offline/no-endpoint development
+  (submit simulates success); the two modes differ only in whether the real POST fires.
 
 ---
 
@@ -760,12 +758,12 @@ is the handoff boundary.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: signup accepted<br/>(registered shopper only;<br/>SCAPI 200 or SFRA success,<br/>fresh key or already-subscribed hit)
-    PENDING --> PENDING: job pass, still OOS<br/>or transient service failure
-    PENDING --> NOTIFIED: job pass, in stock ≥ threshold<br/>AND svc.call().isOk()
-    PENDING --> FAILED: attemptCount ≥ MAX_ATTEMPTS<br/>(orphaned SKU OR repeated hard service failure)
-    NOTIFIED --> [*]: (no further job reads;<br/>row retained until TTL cleanup, see §9)
-    FAILED --> [*]: (terminal; retained for audit until TTL cleanup)
+    [*] --> PENDING: signup accepted (registered shopper only; SCAPI 200 or SFRA success; fresh key or already-subscribed hit)
+    PENDING --> PENDING: job pass, still OOS or transient service failure
+    PENDING --> NOTIFIED: job pass, in stock >= threshold AND svc.call().isOk()
+    PENDING --> FAILED: attemptCount >= MAX_ATTEMPTS (orphaned SKU OR repeated hard service failure)
+    NOTIFIED --> [*]: no further job reads; row retained until TTL cleanup (see §9)
+    FAILED --> [*]: terminal; retained for audit until TTL cleanup
 ```
 
 ### PDP-facing scenarios the job/API design must satisfy (state-level only)
@@ -1082,25 +1080,17 @@ against what the actual code in this workspace does today:
    drift risk (e.g., one gets a validation fix the other doesn't) — worth
    factoring into a single `scripts/waitlistSubscribe.js` both controllers
    call into.
-7. **`MOCK_MODE` in the PWA component is a real, current gap — but the blocker
-   is scoped precisely (updated 2026-08-29).** `overrides/app/components/notify-me/index.jsx`
-   runs in `MOCK_MODE` (`submitMock()`, a `setTimeout` resolving `true`) because
-   the shared demo instance this workspace points at *cannot host* our custom
-   endpoint at all (it's Salesforce-run, not writable). Two independent facts,
-   not one:
-   - **Deploying the endpoint** to `zzft-025` needs only BM Administrator (held)
-     — it is **not** blocked on SLAS and happens in Phase 1.
-   - **A browser calling it live** needs a SLAS shopper token, which needs a
-     usable SLAS client. That client is **blocked on Adyen granting the SLAS
-     Organization Administrator role** (self-provision returned "no SLAS role
-     found" — see the Environment & Dependency Status block above), OR Adyen
-     provisioning a public client directly.
-   So the live path (`submitLive()`) is written but unexercised end-to-end only
-   because of the SLAS-client dependency; the *write path itself* is proven on
-   `zzft-025` without SLAS via the SFRA controller and the Job. When the SLAS
-   client lands it is a ~5-minute config drop-in (Client ID + the four instance
-   values into `config/default.js`, `WAITLIST_LIVE=true`), demoed on
-   `localhost:3000` (its `/callback` is registered), not on the MRT URL (gap #11).
+7. **PWA live submit — RESOLVED (was `MOCK_MODE`-only; updated 2026-09-02).**
+   `overrides/app/components/notify-me/index.jsx` ships with `MOCK_MODE` as the
+   default (`submitMock()`, a `setTimeout` resolving `true`) so the component runs
+   offline / against an instance that can't host the endpoint. With
+   `WAITLIST_LIVE=true` the live path (`submitLive()`) POSTs to the deployed
+   `custom/waitlist/v1` endpoint on `zzft-025` through the PWA Kit same-origin proxy
+   with a SLAS shopper token, and this has been exercised end-to-end: the row lands
+   in the Custom Object and the notify Job/webhook fire. Two fixes were needed —
+   custom-API paths relative to `/organizations/{orgId}`, and the SLAS client scoped
+   for `c_waitlist_rw`. The write path is *also* proven SLAS-free on `zzft-025` via
+   the SFRA controller and the Job.
 8. **Circuit-breaker half-open/recovery semantics for `dw.svc` services are
    not documented** the way they are for Hook circuit breakers. Section 6/8
    describe behavior only in terms of the documented `getUnavailableReason()`
@@ -1115,26 +1105,22 @@ against what the actual code in this workspace does today:
     editable independent of redeploying `steptypes.json`. If BM can retune it
     without a code deploy, the scalability guidance in Section 9 changes
     (retuning becomes a pure ops lever); unverified either way here.
-11. **MRT hosted-URL live guest login is blocked by a `redirect_uri` allowlist,
-    not a bug (2026-08-29).** The PWA is configured with the shared, Salesforce-
-    managed RefArch demo SLAS client whose redirect allowlist includes
-    `http://localhost:3000/callback` but **not** the MRT `*.exp-delivery.com/callback`
-    domain, and cannot be edited by the candidate — so headless guest login
-    400s on the MRT URL. Making the MRT URL itself do live login requires a
-    self-owned `zzft-025` SLAS client (same Option-A role grant) with the MRT
-    callback added. The MRT URL remains valid as a `MOCK_MODE` UX demo; the
-    live-token path is demoed on localhost. Full detail in
-    `docs/DELIVERY-PLAN.md` Appendix A.9.
+11. **MRT hosted-URL live guest login depends on the `redirect_uri` allowlist,
+    not a bug.** The live-token path is demoed on `localhost:3000`, whose
+    `/callback` is registered on the SLAS client. Pointing the *MRT hosted URL* at
+    the live path additionally requires the MRT `*.exp-delivery.com/callback` domain
+    to be registered on the same client's redirect allowlist; until it is, the MRT
+    URL serves as a `MOCK_MODE` UX demo while the live-token path runs on localhost.
+    Full detail in `docs/DELIVERY-PLAN.md` Appendix A.9.
 
 **Bottom line for review:** the three things most worth the user's attention
 before implementation are (1) the query-before-insert-in-a-transaction
 dedupe pattern being *defense-in-depth on an undocumented platform behavior*
 rather than a guaranteed-unique constraint, (2) the TTL/cleanup job being
 **designed but not built**, and (3) the partial-restock over-notification gap
-within a single chunked job run. The one *external* dependency — a usable SLAS
-client — is bounded, off the critical path, and blocks only the live PWA
-headless-submit demo, not any deliverable (see the Environment & Dependency
-Status block and §13).
+within a single chunked job run. The earlier external SLAS-client dependency is
+now **resolved** — the live PWA headless-submit path is proven end-to-end on
+`zzft-025` (see the Environment & Dependency Status block and §13).
 
 ---
 
@@ -1149,11 +1135,11 @@ case list and commands.
 |---|---|---|---|
 | **Cartridge unit** | `mocha` + `sinon` + `proxyquire` (mocking `dw/*`) | `waitlistKey.js`, `rest-apis/waitlist/script.js` (`joinWaitlist`), `controllers/WaitList.js`, `scripts/steps/notifyWaitlist.js`, `scripts/services/waitlistNotifyService.js`, `scripts/helpers/waitlistDemand.js` | Business logic in isolation: hash determinism/collision-safety; validation + dedupe branch; the SFRA route wiring + server-derived-email contract; the job's `PENDING→NOTIFIED/FAILED` transitions and the "leave PENDING on transient failure" branch; service `createRequest`/`parseResponse`/`mockCall`; and the demand report's status tallying, priority ladder, OOS-first ranking, and CSV quoting (§5A). This is where the resilience edge cases (§8) get direct coverage. |
 | **PWA component** | **Jest** + React Testing Library (`pwa-kit-dev test`, already wired as `npm test`) | `overrides/app/components/notify-me/index.jsx`, `overrides/app/components/product-view/index.jsx` | The UI state machine (§7 / UI-DESIGN): checking→idle→sending→done, idle→sending→error, the already-subscribed branch (from a pre-seeded `localStorage` hint on mount AND from an idempotent POST), the skeleton/guest/registered identity branches, and the Add-to-Cart↔Notify-Me swap under in-stock vs OOS props. `submitLive` and the "no status GET on mount" guarantee are tested with a mocked `fetch`; `MOCK_MODE` otherwise. |
-| **E2E (optional)** | **Playwright** | Local `npm start` server | One happy-path spec: PDP with `?forceOOS=1` → Notify-Me renders → fill email → submit → success state. Breadth-proof over the full render/route stack; depth stays in the Jest suite. If time-boxed out, the README states so and notes Jest carries the behavioural coverage. |
+| **E2E (optional)** | **Playwright** | Local `npm start` server | Guest-path specs: PDP with `?forceOOS=1` → Add-to-Cart swaps to Notify-Me → the guest "Sign in to be notified" branch renders → AuthModal handoff. Runs as a guest (there is no email field; the registered one-tap submit needs a real login and is covered by Jest). Breadth-proof over the full render/route stack; depth stays in the Jest suite. If time-boxed out, the README states so and notes Jest carries the behavioural coverage. |
 
 **Why this split:** the highest-value, edge-case-dense logic (idempotency, job transitions,
 service resilience) lives in the cartridge and is fastest to cover exhaustively with mocked
 `dw/*` unit tests; the PWA component's value is its state machine, which Jest+RTL covers
 without a live backend; Playwright adds one end-to-end smoke over the real render path. All
-three run in CI/locally without the SLAS dependency, so testing is never blocked by the one
-external gap.
+three run in CI/locally without any SLAS dependency, so the test suite stands on its own
+regardless of environment.

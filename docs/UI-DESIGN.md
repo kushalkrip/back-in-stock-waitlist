@@ -786,16 +786,18 @@ inspected as part of this task):
 
 ---
 
-## 12. What's real vs. mocked today, and what needs sandbox/SLAS work
+## 12. What's real vs. mocked today
 
-Grounded in `overrides/app/components/notify-me/index.jsx`'s own doc comment plus its code:
+Grounded in `overrides/app/components/notify-me/index.jsx`'s own doc comment plus its code.
+The live path is **proven end-to-end** on `zzft-025`; `MOCK_MODE` remains the default so the
+component runs offline / against an instance that can't host the endpoint.
 
-| Piece | Works today (demo instance, `MOCK_MODE`) | Needs the real `custom/waitlist/v1` endpoint / sandbox |
+| Piece | With `MOCK_MODE` (default) | With `WAITLIST_LIVE=true` (proven live) |
 |---|---|---|
-| Rendering the form, states idle/sending/done/error | Yes — `submitMock()` simulates a 700ms delay then resolves `true` | n/a |
-| `customer.email` for registered shoppers (display only) | Yes — `useCurrentCustomer`/`useCustomerType` run against the shared demo instance's real SLAS auth; used only to render the "we'll notify you at …" confirmation, never sent in the request | n/a — the endpoint derives the email from the token, not the body |
-| `useAuthModal`/`AuthModal` login flow (the guest path) | Yes — standard SLAS registered-user login, works against the demo instance as-is; this is now the only guest affordance (registered-users-only) | n/a |
-| POST to `/custom/waitlist/v1/.../subscriptions` | **No** — only exists on `zzft-025` per the existing comment; `MOCK_MODE` exists specifically to avoid calling it | Yes — must deploy the custom SCAPI endpoint + point config at `zzft-025` (or wherever it lands) with a real SLAS client id, then flip `WAITLIST_LIVE=true` |
+| Rendering the form, states idle/sending/done/error | Yes — `submitMock()` simulates a 700ms delay then resolves `true` | Same UI; the state transitions are driven by the real POST result |
+| `customer.email` for registered shoppers (display only) | Yes — `useCurrentCustomer`/`useCustomerType` run against real SLAS auth; used only to render the "we'll notify you at …" confirmation, never sent in the request | n/a — the endpoint derives the email from the token, not the body |
+| `useAuthModal`/`AuthModal` login flow (the guest path) | Yes — standard SLAS registered-user login; this is the only guest affordance (registered-users-only) | Same |
+| POST to `/custom/waitlist/v1/.../subscriptions` | Skipped — `MOCK_MODE` avoids the network call and simulates success | **Yes, proven** — POSTs to the deployed endpoint on `zzft-025` through the PWA Kit same-origin proxy with a SLAS shopper token (client scoped for `c_waitlist_rw`; custom-API paths relative to `/organizations/{orgId}`) |
 | Idempotent "already-subscribed" detection (§5.4, §6.3) | **Mockable** — a pre-seeded `localStorage` hint drives the mount-time `already` branch; `submitMock()` writes the hint on success | Yes — **DECIDED (#4): local hint on mount + idempotent POST**, NOT a mount-time server read. The POST response carries a distinguishable status (`201 created` vs `200 already-subscribed`); `submitLive()` reads the body and returns `{ok, already}`. A `getWaitlistStatus` GET endpoint exists but is kept OFF the PDP critical path (account view only). |
 | Partial-stock handling (§4) | Yes — unchanged base app behavior (inline "Only N left" + capped Add-to-Cart from the live Shopper Products API). **Not a Notify-Me case**, so nothing new to build or mock here | n/a — no waitlist submission on the partial path |
 | Analytics events (§10) | Not wired to anything — this repo doesn't appear to have an existing analytics dispatch call site inspected as part of this task | Needs whatever analytics/CDP hook the rest of the storefront uses — out of scope to identify here |

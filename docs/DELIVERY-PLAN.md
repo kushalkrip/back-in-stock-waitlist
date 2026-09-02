@@ -41,22 +41,16 @@ Administration → Site Development → Salesforce Commerce API Settings):**
   custom API, import metadata, create Services/Jobs, and run the job) — but **not** the SLAS
   admin role (see next).
 
-**SLAS status confirmed 2026-08-29 — blocked on an Adyen role grant, not on the candidate:**
-- Attempted self-provisioning via the SLAS Admin UI at
-  `https://j1jska9w.api.commercecloud.salesforce.com/shopper/auth-admin/v1/ui/` → SSO succeeded
-  but returned **"Unauthorized – no SLAS role found."**
-- Root cause: the candidate's Account Manager user lacks the **SLAS Organization Administrator**
-  role for tenant `zzft_025`. Only an Account Administrator (Adyen) can grant it.
-- **Ask sent to recruitment (either unblocks):** (A, preferred) grant SLAS Organization
-  Administrator on `zzft_025` so the candidate self-serves the client; or (B) Adyen provisions a
-  **public** SLAS client and sends the Client ID with `http://localhost:3000/callback`
-  registered. Option A is preferred because it also lets the candidate add/edit redirect URIs
-  (including the MRT domain) without further round-trips.
-- **This remains off the critical path.** The custom API, custom object, job, service, SFRA
-  controller, metadata export, and all tests do **not** need SLAS. When the role/client lands it
-  is a ~5-minute drop-in: create the public client → paste Client ID + the four instance values
-  into `config/default.js` → set `WAITLIST_LIVE=true` → the PWA's already-deployed endpoint is
-  called live. See §3 Phase 2.
+**SLAS status — RESOLVED (proven live):**
+- A working SLAS client is configured for `zzft-025` (scoped for `c_waitlist_rw`), and the live
+  shopper-token path is exercised end-to-end: `WAITLIST_LIVE=true` → the PWA's deployed
+  `custom/waitlist/v1` endpoint is called through the same-origin proxy with a SLAS shopper
+  token, and the subscription row lands in the Custom Object. (This was earlier blocked on the
+  Account-Manager user lacking the SLAS Organization Administrator role for `zzft_025`; since
+  cleared.)
+- **It was never on the critical path anyway.** The custom API, custom object, job, service,
+  SFRA controller, metadata export, and all tests do **not** need SLAS — so the backend loop is
+  also proven SLAS-free via the SFRA controller, the Job, and curl. See §3 Phase 2.
 
 **Corrected mental model (clarified 2026-08-29 — supersedes any looser phrasing below):**
 - The custom SCAPI endpoint is **deployed to zzft-025 now, independent of SLAS** (WebDAV push +
@@ -238,7 +232,8 @@ npm test               # Tier 1 unit tests — no sandbox needed
 ## 2. Deliverable-by-deliverable checklist
 
 Status legend: `done` · `needs-sandbox` (needs BM Administrator access to zzft-025, no SLAS
-required) · `needs-SLAS` (blocked on the SLAS client grant) · `not-started`.
+required) · `not-started`. (The earlier `needs-SLAS` state is retired — the SLAS client is now
+configured and the live path is verified.)
 
 ### 2.1 Deliverable 1 — Source Code
 
@@ -246,7 +241,7 @@ required) · `needs-SLAS` (blocked on the SLAS client grant) · `not-started`.
 |---|---|---|
 | Cartridge code (SCAPI endpoint, job, service, controller) | done | — already written in `app_waitlist/cartridge/` |
 | PWA `Notify Me` override (MOCK_MODE) | done | — already working locally |
-| PWA live-submit branch (real SLAS token) | done (code) / needs-SLAS (verify) | code exists in `notify-me/index.jsx`'s `submitLive`; can't exercise end-to-end without a SLAS client |
+| PWA live-submit branch (real SLAS token) | done — verified live | `submitLive` in `notify-me/index.jsx` POSTs to the deployed endpoint with a SLAS token; exercised end-to-end on zzft-025 |
 | Consolidate into one repo | not-started | §1.2 move + `git init` (§1.3) |
 | Delete stale `pwa/overrides` duplicate | not-started | `rm -rf cartridge/pwa/` after confirming storefront copy is authoritative (already confirmed via diff) |
 | Delete `my-new-route` sample page | not-started | `rm -rf overrides/app/pages/my-new-route` |
@@ -326,7 +321,7 @@ See §4 for the full shot-list. Checklist:
 | Ideal script written (with SLAS) | done — this doc, §4 |
 | Record shopper-facing segment | needs-sandbox (fallback: demo instance + MOCK_MODE is enough) |
 | Record merchant-facing segment (BM custom object, job run, webhook.site) | needs-sandbox |
-| Record live-SLAS segment (if it lands in time) | needs-SLAS |
+| Record live-SLAS segment | available — SLAS client configured; live path can be recorded |
 | Edit to 3–5 min, export | not-started |
 
 ### 2.4 Deliverable 4 — Technical Documentation (README)
@@ -357,13 +352,13 @@ README.
 ## 3. Critical-path & sequencing
 
 Phase tags: `no-dependency` (start now) · `needs-BM-Admin-only` (needs zzft-025 sandbox access,
-which the user already has) · `blocked-on-SLAS` (needs the pending SLAS client grant).
+which the user already has). (The former `blocked-on-SLAS` phase is resolved — the SLAS client is configured.)
 
 ```mermaid
 flowchart LR
   P0[Phase 0 — no-dependency] --> P1[Phase 1 — needs-BM-Admin-only]
   P0 --> P1b[Phase 1b — needs-BM-Admin-only, parallel]
-  P1 --> P2[Phase 2 — blocked-on-SLAS]
+  P1 --> P2[Phase 2 — live SLAS path]
   P1b --> P3[Phase 3 — final packaging]
   P1 --> P3
   P2 --> P3
@@ -427,7 +422,7 @@ This is the highest-leverage phase: it proves the **entire backend loop** withou
   not, this sub-item folds into Phase 2).
 - Screenshot capture for the README (BM custom object list, Services config, Job history).
 
-### Phase 2 — blocked-on-SLAS
+### Phase 2 — live SLAS path (now available)
 
 1. Once the SLAS client is granted: update `config/default.js` with the real `shortCode`
    (`zzft-025`'s), `organizationId` (`f_ecom_zzft_025`), `siteId`, and the SLAS `clientId`.
@@ -476,7 +471,7 @@ Total: ~4:15, inside the 3–5 min budget with room for one retake per scene.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| **SLAS client grant is delayed or never arrives** | Can't demo the *live* shopper-facing PWA path; ideal Scene 2 unavailable | Fallback demo script (§4) makes the live shopper path optional evidence, not required evidence — the backend loop is proven via SFRA/curl instead. Also: `MOCK_MODE` in the storefront override already lets the UI/UX be fully demoed without any backend call at all. |
+| **SLAS client (historical risk — now RESOLVED)** | Would have blocked the *live* shopper-facing PWA path | No longer a risk: the SLAS client is configured and the live path is proven end-to-end. The fallback still stands as defence-in-depth — the backend loop is independently proven via SFRA/curl, and `MOCK_MODE` lets the UI/UX be demoed with no backend call at all. |
 | **`services.xml` / `jobs.xml` import fails or partially imports on the target instance (schema-version mismatch)** | Metadata deliverable looks broken; wastes time debugging an import instead of shipping | Create-in-BM-then-re-export mitigation (§2.2) — never depend on the hand-authored XML importing cleanly; treat it as a documented starting point only, ship the re-exported version |
 | **Demo-instance data (shared `xfdy2axw`/`RefArch`) diverges from the real sandbox (`zzft-025`) once seeded** | Shopper-facing demo segment (recorded pre-sandbox) doesn't match the merchant-facing segment (recorded post-sandbox) — inconsistent SKUs/products across the video | Use the *same* seeded demo dataset (RefArch/RefArchGlobal import per `SEED_DATA.md`) on zzft-025 as what's used for any pre-sandbox local demoing, so the OOS SKU and product name are identical across all recorded segments. Re-record Scene 2's product if it doesn't match. |
 | **webhook.site unreliability** (rate limits its own free inbox, URL expires, or the inbox UI is slow to refresh on camera) | Job-run proof in Scene 4 looks broken live | Generate a fresh webhook.site URL right before recording; refresh the inbox tab manually (don't rely on auto-poll) during the take; have a backup: capture the POST via BM's own service **communication log** (`communication-log-enabled: true` is already set in `services.xml`) as a second source of truth if the webhook UI misbehaves on camera |
@@ -644,12 +639,11 @@ or proxy bug** — it is a client-ownership limitation:
   the MRT `*.exp-delivery.com/callback` domain (so **MRT guest login 400s**).
 - **Consequences / options:**
   1. **Demo the live shopper path on `localhost:3000`**, not the MRT URL — localhost's callback
-     is already registered, so headless guest login succeeds there once a usable SLAS client
-     exists. This is the clean, no-dependency path for the *ideal* Scene 2.
-  2. To make the **MRT URL itself** do live guest login, the app must point at a **self-owned
-     SLAS client** (on `zzft-025`) whose allowlist the candidate controls — then add the MRT
-     `…exp-delivery.com/callback` to it. This is unlocked by the same Option-A SLAS role grant
-     tracked above.
+     is registered on the SLAS client, so the live headless-shopper path works there. This is
+     the clean path for the *ideal* Scene 2.
+  2. To make the **MRT URL itself** do live guest login, register the MRT
+     `…exp-delivery.com/callback` domain on the SLAS client's redirect allowlist. Until that's
+     added, localhost carries the live-token demo.
   3. The MRT URL stays fully valid as a **`MOCK_MODE` shopper-UX demo** regardless (the swap,
      the form, the success state all render) — the 400 only affects the *live headless-shopper
      token* path, which the demo does not require (§4 fallback Scene 2 + the SFRA/backend proof

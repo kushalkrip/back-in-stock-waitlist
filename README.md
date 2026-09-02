@@ -48,10 +48,10 @@ object with a step-scoped availability cache) are in [`docs/HLD.md`](docs/HLD.md
 ## Running the two halves
 
 **Storefront (frontend):** `cd storefront && npm ci && npm start` → http://localhost:3000.
-It runs in **MOCK_MODE** by default (submit simulates a successful call) because the custom
-endpoint lives on our sandbox and the live path needs a SLAS client — see
-[`cartridge/README.md`](cartridge/README.md) and `docs/HLD.md §12`. Set `WAITLIST_LIVE=true`
-at build time once the endpoint is deployed.
+It defaults to **MOCK_MODE** (submit simulates a successful call) so it runs offline / without
+a sandbox. Set **`WAITLIST_LIVE=true`** to hit the real deployed `custom/waitlist/v1` endpoint
+on `zzft-025` through the PWA Kit proxy with a SLAS shopper token — this live path is proven
+end-to-end (see [`cartridge/README.md`](cartridge/README.md) and `docs/HLD.md §12`).
 
 **Cartridge (backend):** deploy `cartridge/app_waitlist` to the sandbox and import
 `cartridge/metadata/back_in_stock/`. Full steps in [`cartridge/README.md`](cartridge/README.md).
