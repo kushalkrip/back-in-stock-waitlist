@@ -758,12 +758,12 @@ is the handoff boundary.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: signup accepted (registered shopper only; SCAPI 200 or SFRA success; fresh key or already-subscribed hit)
+    [*] --> PENDING: signup accepted, registered shopper only, SCAPI 200 or SFRA success, fresh key or already-subscribed hit
     PENDING --> PENDING: job pass, still OOS or transient service failure
-    PENDING --> NOTIFIED: job pass, in stock >= threshold AND svc.call().isOk()
-    PENDING --> FAILED: attemptCount >= MAX_ATTEMPTS (orphaned SKU OR repeated hard service failure)
-    NOTIFIED --> [*]: no further job reads; row retained until TTL cleanup (see §9)
-    FAILED --> [*]: terminal; retained for audit until TTL cleanup
+    PENDING --> NOTIFIED: job pass, in stock at or above threshold, service call ok
+    PENDING --> FAILED: attemptCount at or above MAX_ATTEMPTS, orphaned SKU or repeated hard service failure
+    NOTIFIED --> [*]: no further job reads, row retained until TTL cleanup, see section 9
+    FAILED --> [*]: terminal, retained for audit until TTL cleanup
 ```
 
 ### PDP-facing scenarios the job/API design must satisfy (state-level only)
