@@ -63,7 +63,58 @@ is in [`cartridge/README.md` → *Install on an SFRA site*](cartridge/README.md#
 
 ## Testing
 
-- **Jest** component tests cover the frontend identity branches
-  (skeleton / guest / registered one-tap / done / error) — `cd storefront && npm test`.
-- **Playwright** E2E specs drive the running PWA (guest sign-in prompt, mock submit,
-  the `?forceOOS=1` demo helper) — see `storefront/` test setup.
+Three layers, one per concern. Each app owns its own runner:
+
+- **Jest** (storefront) — **17 tests** across two component suites. `notify-me`
+  covers the identity branches (skeleton / guest / registered one-tap / already /
+  done / error) and the submit path in mock + live mode; `product-view` covers the
+  buy-box wrapper — passthrough when in stock / loading / set / bundle / unresolved
+  variant, and the swap (drop `addToCart`/`updateCart`, inject `NotifyMeForm` via
+  `customButtons`) for a resolved OOS variant plus the `?forceOOS=1` preview.
+  `product-view` is at 100% line/branch coverage.
+  ```bash
+  cd storefront && npm test
+  ```
+
+- **Playwright** (storefront) — E2E specs that drive the *running* PWA in a real
+  browser: the OOS buy-box swap (Add to Cart → Notify Me) via the `?forceOOS=1`
+  demo helper, the guest "sign in to be notified" branch, and the AuthModal handoff.
+  They run as a **guest** — the registered submit path needs a real login and is
+  covered by Jest instead.
+  ```bash
+  cd storefront
+  npx playwright install chromium   # first run only: fetch the browser binary
+  npx playwright test               # runs all specs
+  ```
+  You don't need to start the app yourself: the `webServer` block in
+  `playwright.config.js` reuses a dev server already on `:3000`, or runs `npm start`
+  for you if none is up. `WAITLIST_LIVE` is irrelevant here (guest flow, no submit).
+  Handy variants:
+  ```bash
+  npx playwright test --headed              # watch it in a real browser window
+  npx playwright test --ui                  # interactive step-through debugger
+  npx playwright test -g "auth modal"       # a single test by name
+  npx playwright show-report                # open the last HTML report
+  ```
+
+- **Mocha** (cartridge) — **93 tests** covering every server-side module. The
+  `dw/*` platform classes and `*/cartridge/...` requires are stubbed with
+  `sinon` + `proxyquire` (`superModule` overrides are injected via a custom
+  `Module._compile`), so the job lifecycle, the SCAPI handlers and the SFRA hooks
+  all run under plain Node:
+  ```bash
+  cd cartridge/app_waitlist && npm test
+  ```
+
+  | Area | File under test | What it locks down |
+  |---|---|---|
+  | Idempotency key | `scripts/util/waitlistKey.js` | SHA-256 of `lower(trim(email))\|sku`; case/whitespace collision; sku case-sensitivity; null-safety |
+  | Subscribe helper | `scripts/helpers/waitlistSubscribe.js` | new→`subscribed` row shape, existing→`already-subscribed` (no insert), `no-account-email`/`invalid-sku` guards |
+  | **Notify job** (chunk step) | `scripts/steps/notifyWaitlist.js` | PENDING-only sorted query; variant-level `isInStock(threshold)`; per-SKU availability cache (O(distinct SKUs)); transient→stay PENDING+warning vs hard→FAILED at cap vs orphan expiry |
+  | **SCAPI endpoint** | `rest-apis/waitlist/script.js` | `joinWaitlist` (subscribed / already / **body-email ignored** / guest 401 / no-email 401 / invalid-json 400 / invalid-sku 400 / persistence 500) + `getWaitlistStatus` (true / false / 400 / guest fail-open) |
+  | Outbound service | `scripts/services/waitlistNotifyService.js` | request shaping, status parsing, mock 200, **PII log scrubbing** |
+  | Post-login resume | `controllers/Account.js` | subscribe on auth success, `?wlnotified=1`/`&` marker, no-op / leave-pending / swallow-error branches on both Login + SubmitRegistration |
+  | Login redirect | `scripts/helpers/accountHelpers.js` | one-shot stashed return URL vs delegate-to-base |
+  | Demo seeder | `scripts/steps/seedInventory.js` | allocation writes, distinct PENDING derivation, SeedLimit cap, NO_LIST guard |
+  | Demand report | `scripts/helpers/waitlistDemand.js` + `scripts/steps/waitlistDemandReport.js` | ranking/CSV aggregation + timestamped IMPEX export, mkdirs, error mapping |
+  | SFRA client + controller | `client/notify.js`, `controllers/WaitList.js` | `shouldShowNotify` / `buildSubscribeBody` / `stripWlNotified`, controller gating |
