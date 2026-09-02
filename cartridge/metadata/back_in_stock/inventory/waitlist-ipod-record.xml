@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory xmlns="http://www.demandware.com/xml/impex/inventory/2007-05-31">
+    <inventory-list list-id="waitlist-inventory">
+        <records>
+            <record product-id="apple-ipod-touch-32gbM">
+                <allocation>100</allocation>
+                <allocation-timestamp>2026-09-01T00:00:00.000Z</allocation-timestamp>
+                <perpetual-flag>false</perpetual-flag>
+                <preorder-backorder-handling>none</preorder-backorder-handling>
+            </record>
+        </records>
+    </inventory-list>
+</inventory>

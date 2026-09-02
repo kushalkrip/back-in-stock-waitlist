@@ -1,0 +1,37 @@
+<iscomment>
+    app_waitlist OVERRIDE of app_storefront_base product/components/addToCartProduct.
+
+    A faithful copy of the base add-to-cart row, plus:
+      - the app_waitlist client bundle registered once (assets.addJs),
+      - the buy-box row tagged data-waitlist-atc and hidden server-side when the
+        resolved variant is out of stock (so Notify Me takes its place), and
+      - the Back-In-Stock "Notify Me" block appended after it.
+
+    This is the SMALLEST base seam at the buy box that renders exactly once per
+    PDP load: base client JS toggles the add-to-cart button's disabled state on
+    variant change but does NOT re-fetch this partial, so the notify block is
+    never duplicated. Overriding this component (rather than forking the whole
+    productDetails.isml) keeps the SFRA-upgrade re-merge surface tiny.
+</iscomment>
+<isscript>
+    var assets = require('*/cartridge/scripts/assets.js');
+    assets.addJs('/js/waitlist.js');
+</isscript>
+
+<isset name="wlNotify" value="${product.readyToOrder && !product.available && product.productType !== 'set' && product.productType !== 'bundle'}" scope="page" />
+
+<div class="row cart-and-ipay${wlNotify ? ' d-none' : ''}" data-waitlist-atc>
+    <div class="col-sm-12">
+        <input type="hidden" class="add-to-cart-url" value="${pdict.addToCartUrl}">
+        <button class="add-to-cart btn btn-primary"
+                data-pid="${product.id}"
+                ${!product.readyToOrder || !product.available ? "disabled" : ""}>
+            <i class="fa fa-shopping-bag"></i>
+            ${Resource.msg('button.addtocart', 'common', null)}
+        </button>
+
+        <isinclude template="product/components/addToCartButtonExtension"/>
+    </div>
+</div>
+
+<isinclude template="product/waitlistNotify" />

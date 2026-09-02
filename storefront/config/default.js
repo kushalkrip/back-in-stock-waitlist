@@ -167,6 +167,16 @@ module.exports = {
         // Google Cloud api config
         googleCloudAPI: {
             apiKey: process.env.GOOGLE_CLOUD_API_KEY
+        },
+        // Back-in-stock waitlist. `live` gates whether the PDP Notify Me form
+        // calls the real custom SCAPI endpoint (true) or runs in mock mode
+        // (false, no network). Sourced from the WAITLIST_LIVE build/SSR env var:
+        // config/default.js is evaluated server-side where process.env exists,
+        // and the resolved `app` config is serialized to the client — which is
+        // how the browser (where process.env.WAITLIST_LIVE is NOT substituted by
+        // webpack) can read the flag via getConfig(). See the notify-me component.
+        waitlist: {
+            live: process.env.WAITLIST_LIVE === 'true'
         }
     },
     // This list contains server-side only libraries that you don't want to be compiled by webpack

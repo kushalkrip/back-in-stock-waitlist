@@ -2747,12 +2747,6 @@
       "value": "quantity"
     }
   ],
-  "lCPCxk": [
-    {
-      "type": 0,
-      "value": "Please select all your options above"
-    }
-  ],
   "list_menu.nav.assistive_msg": [
     {
       "type": 0,
@@ -3177,6 +3171,108 @@
     {
       "type": 0,
       "value": "Switch to one address?"
+    }
+  ],
+  "notify_me.already_body": [
+    {
+      "type": 0,
+      "value": "We’ll email "
+    },
+    {
+      "type": 1,
+      "value": "email"
+    },
+    {
+      "type": 0,
+      "value": " the moment this is back in stock."
+    }
+  ],
+  "notify_me.already_body_generic": [
+    {
+      "type": 0,
+      "value": "We’ll email your account address the moment this is back in stock."
+    }
+  ],
+  "notify_me.already_title": [
+    {
+      "type": 0,
+      "value": "You’re already on the list ✓"
+    }
+  ],
+  "notify_me.body_guest_login": [
+    {
+      "type": 0,
+      "value": "Sign in and we’ll notify you by email the moment this is back in stock."
+    }
+  ],
+  "notify_me.done_body": [
+    {
+      "type": 0,
+      "value": "We’ll email "
+    },
+    {
+      "type": 1,
+      "value": "email"
+    },
+    {
+      "type": 0,
+      "value": " the moment this is back in stock."
+    }
+  ],
+  "notify_me.done_body_generic": [
+    {
+      "type": 0,
+      "value": "We’ll email your account address the moment this is back in stock."
+    }
+  ],
+  "notify_me.done_title": [
+    {
+      "type": 0,
+      "value": "You’re on the list! 🎉"
+    }
+  ],
+  "notify_me.error": [
+    {
+      "type": 0,
+      "value": "Something went wrong. Please try again."
+    }
+  ],
+  "notify_me.signin_cta": [
+    {
+      "type": 0,
+      "value": "Sign in to be notified"
+    }
+  ],
+  "notify_me.silent_email_notice": [
+    {
+      "type": 0,
+      "value": "We’ll email "
+    },
+    {
+      "type": 1,
+      "value": "email"
+    },
+    {
+      "type": 0,
+      "value": " when this is back in stock."
+    }
+  ],
+  "notify_me.silent_email_notice_generic": [
+    {
+      "type": 0,
+      "value": "We’ll email your account address when this is back in stock."
+    }
+  ],
+  "notify_me.submit": [
+    {
+      "type": 0,
+      "value": "Notify me"
+    }
+  ],
+  "notify_me.title": [
+    {
+      "type": 0,
+      "value": "Out of stock"
     }
   ],
   "offline_banner.description.browsing_offline_mode": [
@@ -3921,48 +4017,6 @@
       "value": " from wishlist"
     }
   ],
-  "product_view.button.add_bundle_to_cart": [
-    {
-      "type": 0,
-      "value": "Add Bundle to Cart"
-    }
-  ],
-  "product_view.button.add_bundle_to_wishlist": [
-    {
-      "type": 0,
-      "value": "Add Bundle to Wishlist"
-    }
-  ],
-  "product_view.button.add_set_to_cart": [
-    {
-      "type": 0,
-      "value": "Add Set to Cart"
-    }
-  ],
-  "product_view.button.add_set_to_wishlist": [
-    {
-      "type": 0,
-      "value": "Add Set to Wishlist"
-    }
-  ],
-  "product_view.button.add_to_cart": [
-    {
-      "type": 0,
-      "value": "Add to Cart"
-    }
-  ],
-  "product_view.button.add_to_wishlist": [
-    {
-      "type": 0,
-      "value": "Add to Wishlist"
-    }
-  ],
-  "product_view.button.update": [
-    {
-      "type": 0,
-      "value": "Update"
-    }
-  ],
   "product_view.error.no_store_selected_for_pickup": [
     {
       "type": 0,
@@ -4001,28 +4055,10 @@
       "value": "productName"
     }
   ],
-  "product_view.label.delivery": [
-    {
-      "type": 0,
-      "value": "Delivery:"
-    }
-  ],
-  "product_view.label.pickup_in_select_store_prefix": [
-    {
-      "type": 0,
-      "value": "Pick up in"
-    }
-  ],
-  "product_view.label.pickup_in_store": [
-    {
-      "type": 0,
-      "value": "Pick Up in Store"
-    }
-  ],
   "product_view.label.quantity": [
     {
       "type": 0,
-      "value": "Quantity:"
+      "value": "Quantity"
     }
   ],
   "product_view.label.quantity_decrement": [
@@ -4035,56 +4071,6 @@
     {
       "type": 0,
       "value": "+"
-    }
-  ],
-  "product_view.label.select_store_link": [
-    {
-      "type": 0,
-      "value": "Select Store"
-    }
-  ],
-  "product_view.label.ship_to_address": [
-    {
-      "type": 0,
-      "value": "Ship to Address"
-    }
-  ],
-  "product_view.label.variant_type": [
-    {
-      "type": 1,
-      "value": "variantType"
-    }
-  ],
-  "product_view.link.full_details": [
-    {
-      "type": 0,
-      "value": "See full details"
-    }
-  ],
-  "product_view.prepareBasket": [
-    {
-      "type": 0,
-      "value": "Unable to determine product ID for basket"
-    }
-  ],
-  "product_view.status.in_stock_at_store": [
-    {
-      "type": 0,
-      "value": "In stock at "
-    },
-    {
-      "type": 1,
-      "value": "storeName"
-    }
-  ],
-  "product_view.status.out_of_stock_at_store": [
-    {
-      "type": 0,
-      "value": "Out of Stock at "
-    },
-    {
-      "type": 1,
-      "value": "storeName"
     }
   ],
   "profile_card.info.profile_updated": [
@@ -5649,16 +5635,6 @@
     {
       "type": 0,
       "value": "Out of stock"
-    }
-  ],
-  "use_product.message.out_of_stock_for_product": [
-    {
-      "type": 0,
-      "value": "Out of stock for "
-    },
-    {
-      "type": 1,
-      "value": "productName"
     }
   ],
   "use_profile_fields.error.required_email": [

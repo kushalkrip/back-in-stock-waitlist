@@ -64,7 +64,11 @@ function build(opts) {
             var sku = row.custom.productID;
             if (!sku) { continue; }
             var bucket = bySku[sku] || (bySku[sku] = { waiting: 0, notified: 0, failed: 0, total: 0 });
-            var status = row.custom.status;
+            // `status` is an enum-of-string custom attribute. The platform returns
+            // it as a host String, which is NOT strictly === to a JS string literal
+            // -- comparing directly leaves every bucket at 0 (the counts silently
+            // read as zero even though the rows exist). Coerce to a primitive first.
+            var status = String(row.custom.status);
             bucket.total++;
             if (status === 'PENDING') { bucket.waiting++; }
             else if (status === 'NOTIFIED') { bucket.notified++; }

@@ -1116,9 +1116,6 @@
   "item_variant.quantity.label": {
     "defaultMessage": "Quantity selector for {productName}. Selected quantity is {quantity}"
   },
-  "lCPCxk": {
-    "defaultMessage": "Please select all your options above"
-  },
   "list_menu.nav.assistive_msg": {
     "defaultMessage": "Main navigation"
   },
@@ -1331,6 +1328,45 @@
   },
   "multi_ship_warning_modal.title.switch_to_one_address": {
     "defaultMessage": "Switch to one address?"
+  },
+  "notify_me.already_body": {
+    "defaultMessage": "We’ll email {email} the moment this is back in stock."
+  },
+  "notify_me.already_body_generic": {
+    "defaultMessage": "We’ll email your account address the moment this is back in stock."
+  },
+  "notify_me.already_title": {
+    "defaultMessage": "You’re already on the list ✓"
+  },
+  "notify_me.body_guest_login": {
+    "defaultMessage": "Sign in and we’ll notify you by email the moment this is back in stock."
+  },
+  "notify_me.done_body": {
+    "defaultMessage": "We’ll email {email} the moment this is back in stock."
+  },
+  "notify_me.done_body_generic": {
+    "defaultMessage": "We’ll email your account address the moment this is back in stock."
+  },
+  "notify_me.done_title": {
+    "defaultMessage": "You’re on the list! 🎉"
+  },
+  "notify_me.error": {
+    "defaultMessage": "Something went wrong. Please try again."
+  },
+  "notify_me.signin_cta": {
+    "defaultMessage": "Sign in to be notified"
+  },
+  "notify_me.silent_email_notice": {
+    "defaultMessage": "We’ll email {email} when this is back in stock."
+  },
+  "notify_me.silent_email_notice_generic": {
+    "defaultMessage": "We’ll email your account address when this is back in stock."
+  },
+  "notify_me.submit": {
+    "defaultMessage": "Notify me"
+  },
+  "notify_me.title": {
+    "defaultMessage": "Out of stock"
   },
   "offline_banner.description.browsing_offline_mode": {
     "defaultMessage": "You're currently browsing in offline mode"
@@ -1627,27 +1663,6 @@
   "product_tile.assistive_msg.remove_from_wishlist": {
     "defaultMessage": "Remove {product} from wishlist"
   },
-  "product_view.button.add_bundle_to_cart": {
-    "defaultMessage": "Add Bundle to Cart"
-  },
-  "product_view.button.add_bundle_to_wishlist": {
-    "defaultMessage": "Add Bundle to Wishlist"
-  },
-  "product_view.button.add_set_to_cart": {
-    "defaultMessage": "Add Set to Cart"
-  },
-  "product_view.button.add_set_to_wishlist": {
-    "defaultMessage": "Add Set to Wishlist"
-  },
-  "product_view.button.add_to_cart": {
-    "defaultMessage": "Add to Cart"
-  },
-  "product_view.button.add_to_wishlist": {
-    "defaultMessage": "Add to Wishlist"
-  },
-  "product_view.button.update": {
-    "defaultMessage": "Update"
-  },
   "product_view.error.no_store_selected_for_pickup": {
     "defaultMessage": "No valid store or inventory found for pickup"
   },
@@ -1663,44 +1678,14 @@
   "product_view.label.assistive_msg.quantity_increment": {
     "defaultMessage": "Increment Quantity for {productName}"
   },
-  "product_view.label.delivery": {
-    "defaultMessage": "Delivery:"
-  },
-  "product_view.label.pickup_in_select_store_prefix": {
-    "defaultMessage": "Pick up in"
-  },
-  "product_view.label.pickup_in_store": {
-    "defaultMessage": "Pick Up in Store"
-  },
   "product_view.label.quantity": {
-    "defaultMessage": "Quantity:"
+    "defaultMessage": "Quantity"
   },
   "product_view.label.quantity_decrement": {
     "defaultMessage": "−"
   },
   "product_view.label.quantity_increment": {
     "defaultMessage": "+"
-  },
-  "product_view.label.select_store_link": {
-    "defaultMessage": "Select Store"
-  },
-  "product_view.label.ship_to_address": {
-    "defaultMessage": "Ship to Address"
-  },
-  "product_view.label.variant_type": {
-    "defaultMessage": "{variantType}"
-  },
-  "product_view.link.full_details": {
-    "defaultMessage": "See full details"
-  },
-  "product_view.prepareBasket": {
-    "defaultMessage": "Unable to determine product ID for basket"
-  },
-  "product_view.status.in_stock_at_store": {
-    "defaultMessage": "In stock at {storeName}"
-  },
-  "product_view.status.out_of_stock_at_store": {
-    "defaultMessage": "Out of Stock at {storeName}"
   },
   "profile_card.info.profile_updated": {
     "defaultMessage": "Profile updated"
@@ -2349,9 +2334,6 @@
   },
   "use_product.message.out_of_stock": {
     "defaultMessage": "Out of stock"
-  },
-  "use_product.message.out_of_stock_for_product": {
-    "defaultMessage": "Out of stock for {productName}"
   },
   "use_profile_fields.error.required_email": {
     "defaultMessage": "Please enter a valid email address."

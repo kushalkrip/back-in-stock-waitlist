@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DEMO-ONLY, MANUAL job to exercise the full back-in-stock lifecycle at scale.
+    seed   -> WaitlistSeedInventory restocks the SKUs shoppers are PENDING on
+              (allocation SeedQty) in THIS site's inventory list.
+    notify -> WaitlistNotifyStep flips those rows PENDING -> NOTIFIED and fires
+              the outbound "email" service in the same run.
+  Set the flow context site-id to the site you are demoing (WaitlistDemo for the
+  PWA/SCAPI path; e.g. RefArchGlobal for the SFRA path) and run On-Demand.
+-->
+<jobs xmlns="http://www.demandware.com/xml/impex/jobs/2015-07-01">
+    <job job-id="WaitlistDemoRestock">
+        <description>DEMO: restock waited-on SKUs, then notify subscribers, in one run.</description>
+        <parameters/>
+        <flow>
+            <context site-id="WaitlistDemo"/>
+            <step step-id="seed" type="custom.WaitlistSeedInventory" enforce-restart="false">
+                <description>Restock the distinct SKUs that have PENDING waitlist rows.</description>
+                <parameters>
+                    <parameter name="Restock">true</parameter>
+                    <parameter name="SeedQty">100</parameter>
+                    <parameter name="SeedLimit">0</parameter>
+                </parameters>
+            </step>
+            <step step-id="notify" type="custom.WaitlistNotifyStep" enforce-restart="false">
+                <description>Walk PENDING rows, check inventory, notify, update status.</description>
+                <parameters>
+                    <parameter name="NotifyThreshold">1</parameter>
+                </parameters>
+            </step>
+        </flow>
+        <rules>
+            <on-exit status="ERROR">
+                <stop-job/>
+            </on-exit>
+        </rules>
+        <triggers>
+            <run-once enabled="false">
+                <date>2026-01-01Z</date>
+                <start-time>00:00:00.000Z</start-time>
+            </run-once>
+        </triggers>
+    </job>
+</jobs>

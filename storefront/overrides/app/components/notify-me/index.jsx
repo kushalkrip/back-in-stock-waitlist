@@ -11,6 +11,7 @@ import {
     Stack,
     Text
 } from '@salesforce/retail-react-app/app/components/shared/ui'
+import {getConfig} from '@salesforce/pwa-kit-runtime/utils/ssr-config'
 
 /**
  * NotifyMeForm — REGISTERED-USERS-ONLY back-in-stock signup.
@@ -59,10 +60,26 @@ import {
  */
 const SCAPI_PATH = 'custom/waitlist/v1'
 
-// `process` is only defined server-side in the PWA Kit bundle; guard it so the
-// browser doesn't throw ReferenceError. Evaluated at submit time (not import)
-// so the flag can be toggled per environment/test rather than frozen once.
-const isMockMode = () => typeof process === 'undefined' || process.env.WAITLIST_LIVE !== 'true'
+// Whether to simulate the subscribe call instead of hitting the real endpoint.
+// Evaluated at submit time (not import) so it can be toggled per environment/test.
+//
+// Precedence:
+//   1. An explicit WAITLIST_LIVE env var wins — this is what server/build/test
+//      contexts set (webpack does NOT substitute process.env.WAITLIST_LIVE into
+//      the *client* bundle, so it's only meaningful where `process` is real).
+//   2. In the browser we read the value the server serialized into the runtime
+//      config (config/default.js maps WAITLIST_LIVE -> app.waitlist.live).
+//   3. Default to safe mock mode if neither is available.
+const isMockMode = () => {
+    if (typeof process !== 'undefined' && process.env && typeof process.env.WAITLIST_LIVE === 'string') {
+        return process.env.WAITLIST_LIVE !== 'true'
+    }
+    try {
+        return getConfig()?.app?.waitlist?.live !== true
+    } catch (e) {
+        return true
+    }
+}
 
 // Base URL for the subscriptions resource. POST (with an email-free body)
 // creates the subscription; the server derives the email from the token.

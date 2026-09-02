@@ -1,0 +1,36 @@
+<iscomment>
+    Back-In-Stock "Notify Me" block (app_waitlist). Markup only -- all behaviour
+    is in the bundled client module static/default/js/waitlist.js, and every
+    user-visible string is rendered here via Resource.msg and read from data-*
+    attributes so the JS carries no hardcoded copy.
+
+    Self-contained: recomputes its own show/hide flag from the product model, so
+    it renders correctly wherever the add-to-cart component is included. The
+    block starts hidden (d-none) unless the resolved variant is out of stock;
+    the client module flips it against the add-to-cart row on variant change.
+
+    Cache-safe: no CSRF token is embedded (the PDP is page-cacheable). The button
+    fetches a fresh session-bound token from WaitList-Token at click time.
+</iscomment>
+<isset name="wlNotifyShow" value="${product.readyToOrder && !product.available && product.productType !== 'set' && product.productType !== 'bundle'}" scope="page" />
+
+<div class="row waitlist-notify${wlNotifyShow ? '' : ' d-none'}" data-waitlist-block
+    data-sku="${product.id}"
+    data-token-url="${URLUtils.url('WaitList-Token')}"
+    data-subscribe-url="${URLUtils.url('WaitList-Subscribe')}"
+    data-before-login-url="${URLUtils.url('WaitList-BeforeLogin')}"
+    data-login-url="${URLUtils.url('Login-Show')}"
+    data-msg-cta="${Resource.msg('waitlist.notify.cta', 'waitlist', null)}"
+    data-msg-onlist="${Resource.msg('waitlist.notify.onlist', 'waitlist', null)}"
+    data-msg-already="${Resource.msg('waitlist.notify.already', 'waitlist', null)}"
+    data-msg-done="${Resource.msg('waitlist.notify.done', 'waitlist', null)}"
+    data-msg-alreadymsg="${Resource.msg('waitlist.notify.alreadymsg', 'waitlist', null)}"
+    data-msg-error="${Resource.msg('waitlist.notify.error', 'waitlist', null)}"
+    data-msg-neterror="${Resource.msg('waitlist.notify.neterror', 'waitlist', null)}">
+    <div class="col-12">
+        <button type="button" class="btn btn-outline-primary btn-block js-waitlist-notify">
+            ${Resource.msg('waitlist.notify.cta', 'waitlist', null)}
+        </button>
+        <div class="waitlist-notify-msg" aria-live="polite"></div>
+    </div>
+</div>
