@@ -155,4 +155,33 @@ describe('ProductView wrapper — Notify Me swap', () => {
         expect(baseProps.customButtons).toHaveLength(2)
         expect(baseProps.customButtons[1].props.sku).toBe('SKU-1')
     })
+
+    test('offers Notify Me at the master level when EVERY variant is unorderable', () => {
+        // Wholly sold-out master, no variant resolved. Notify Me is keyed to the
+        // master id so the shopper is not dead-ended by the greyed dropdown.
+        mockUseDerivedProduct.mockReturnValue({showLoading: false, variant: undefined, isOutOfStock: true})
+        const master = {
+            id: 'MASTER-1',
+            variationAttributes: [{id: 'size'}],
+            type: {master: true},
+            variants: [{productId: 'V-1', orderable: false}, {productId: 'V-2', orderable: false}]
+        }
+        render(<ProductView product={master} {...noopHandlers} />)
+        expect(baseProps.addToCart).toBeUndefined()
+        expect(baseProps.customButtons[0].props.sku).toBe('MASTER-1')
+    })
+
+    test('does NOT offer master-level Notify Me while some variant is still orderable', () => {
+        // Some sizes in stock + none selected → let the shopper pick, no swap.
+        mockUseDerivedProduct.mockReturnValue({showLoading: false, variant: undefined, isOutOfStock: true})
+        const master = {
+            id: 'MASTER-1',
+            variationAttributes: [{id: 'size'}],
+            type: {master: true},
+            variants: [{productId: 'V-1', orderable: false}, {productId: 'V-2', orderable: true}]
+        }
+        render(<ProductView product={master} {...noopHandlers} />)
+        expect(baseProps.addToCart).toBe(noopHandlers.addToCart)
+        expect(baseProps.customButtons).toBeUndefined()
+    })
 })

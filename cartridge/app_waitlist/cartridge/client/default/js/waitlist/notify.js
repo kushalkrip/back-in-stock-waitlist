@@ -27,18 +27,24 @@ var SELECTORS = {
 };
 
 /**
- * Should the Notify Me block be shown for this SFRA product model? True only
- * when the shopper has resolved a concrete, orderable-but-unavailable unit:
- * readyToOrder (all variation attrs chosen) AND NOT available AND not a
- * set/bundle. Mirrors the PWA rule in docs/UI-DESIGN.md.
+ * Should the Notify Me block be shown for this SFRA product model? Shown for an
+ * out-of-stock (strict `available === false`), non-set/bundle unit that is
+ * EITHER a resolved variant (readyToOrder -- all variation attrs chosen) OR a
+ * variation master with no orderable variants at all (productType 'master').
+ * The master fallback exists because base SFRA greys out every OOS variation
+ * value, so a wholly sold-out style can never resolve a variant from the
+ * dropdown. A master's `available` is the AGGREGATE orderability, so
+ * master + !available means "zero orderable variants". Mirrors the PWA rule in
+ * docs/UI-DESIGN.md.
  * @param {Object} product - SFRA product model (from the ajax variation response)
  * @returns {boolean}
  */
 function shouldShowNotify(product) {
     if (!product) { return false; }
     var type = product.productType;
-    return !!product.readyToOrder && product.available === false
-        && type !== 'set' && type !== 'bundle';
+    if (type === 'set' || type === 'bundle') { return false; }
+    if (product.available !== false) { return false; } // strict: missing flag => not shown
+    return !!product.readyToOrder || type === 'master';
 }
 
 /**

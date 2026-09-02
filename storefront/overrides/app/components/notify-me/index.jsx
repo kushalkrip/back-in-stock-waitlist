@@ -83,8 +83,17 @@ const isMockMode = () => {
 
 // Base URL for the subscriptions resource. POST (with an email-free body)
 // creates the subscription; the server derives the email from the token.
-const subscriptionsUrl = ({shortCode, organizationId, siteId}) =>
-    `https://${shortCode}.api.commercecloud.salesforce.com/${SCAPI_PATH}` +
+//
+// We route through the PWA Kit proxy (`proxyBase` = `<origin>/mobify/proxy/api`,
+// mapped to the SCAPI host by `proxyConfigs` in config/default.js) rather than
+// hitting `https://<shortCode>.api.commercecloud.salesforce.com` directly. A
+// direct cross-origin call is blocked twice over: the browser's Content Security
+// Policy `connect-src` allowlist does not include the SCAPI host (only `'self'`),
+// and SCAPI would reject the cross-origin request at CORS. Going through the
+// same-origin proxy — exactly how commerce-sdk-react makes its own Shopper API
+// calls — sidesteps both. The proxy forwards the Authorization bearer header.
+const subscriptionsUrl = ({proxyBase, organizationId, siteId}) =>
+    `${proxyBase}/${SCAPI_PATH}` +
     `/organizations/${organizationId}/subscriptions?siteId=${siteId}`
 
 // ── Local "already subscribed" hint ──────────────────────────────────────────
@@ -153,10 +162,15 @@ const NotifyMeForm = ({sku, locale}) => {
     }, [identityKnown, isRegistered, sku, displayEmail])
 
     const submitLive = async () => {
-        // shortCode / organizationId / siteId come from config/default.js.
-        const {shortCode, organizationId, siteId} = api.shopperProducts.clientConfig.parameters
+        // organizationId / siteId come from config/default.js; `proxy` is the
+        // same-origin proxy base commerce-sdk-react resolves at runtime
+        // (`<origin>/mobify/proxy/api`). Fall back to the well-known proxyPath if
+        // the SDK hasn't populated it (e.g. under test).
+        const {parameters, proxy} = api.shopperProducts.clientConfig
+        const {organizationId, siteId} = parameters
+        const proxyBase = proxy || '/mobify/proxy/api'
         const token = await getTokenWhenReady()
-        const res = await fetch(subscriptionsUrl({shortCode, organizationId, siteId}), {
+        const res = await fetch(subscriptionsUrl({proxyBase, organizationId, siteId}), {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${token}`,

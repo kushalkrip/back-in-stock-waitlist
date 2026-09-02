@@ -6,37 +6,88 @@
         var URLUtils = require('dw/web/URLUtils');
         var report = pdict.report;
         var totals = report.totals || {};
+        var rows = report.rows || [];
     </isscript>
 
     <style type="text/css">
-        .wl-wrap { padding: 16px 24px; font-family: Arial, Helvetica, sans-serif; color: #16325c; }
-        .wl-wrap h1 { font-size: 20px; margin: 0 0 4px; }
-        .wl-sub { color: #54698d; font-size: 12px; margin-bottom: 16px; }
-        .wl-cards { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-        .wl-card { border: 1px solid #d8dde6; border-radius: 4px; padding: 10px 16px; min-width: 120px; background: #f7f9fb; }
-        .wl-card .n { font-size: 22px; font-weight: bold; display: block; }
-        .wl-card .l { font-size: 11px; text-transform: uppercase; color: #54698d; letter-spacing: .04em; }
-        .wl-card.alert .n { color: #c23934; }
-        .wl-actions { margin-bottom: 12px; }
-        .wl-btn { display: inline-block; background: #0070d2; color: #fff; text-decoration: none; padding: 7px 14px; border-radius: 4px; font-size: 13px; }
-        .wl-btn:hover { background: #005fb2; }
+        .wl-wrap {
+            padding: 20px 28px 32px;
+            font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+            color: #16325c;
+            background: #f3f6f9;
+            min-height: 100%;
+        }
+        /* Header bar ------------------------------------------------------- */
+        .wl-head {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .wl-head h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.01em; }
+        .wl-sub { color: #54698d; font-size: 12.5px; line-height: 1.5; max-width: 640px; }
+        .wl-sub .gen { color: #706e6b; }
+        /* Primary action --------------------------------------------------- */
+        .wl-wrap a.wl-btn, .wl-wrap a.wl-btn:link, .wl-wrap a.wl-btn:visited,
+        .wl-wrap a.wl-btn:hover, .wl-wrap a.wl-btn:active {
+            display: inline-flex; align-items: center; gap: 7px;
+            background: #0176d3; color: #ffffff; text-decoration: none;
+            padding: 9px 18px; border-radius: 6px; font-size: 13px; font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0,0,0,.12); transition: background .12s ease, box-shadow .12s ease;
+            white-space: nowrap;
+        }
+        .wl-wrap a.wl-btn:hover, .wl-wrap a.wl-btn:active { background: #014486; box-shadow: 0 2px 6px rgba(1,118,211,.35); }
+        .wl-wrap a.wl-btn svg { width: 15px; height: 15px; fill: #ffffff; }
+        /* KPI cards -------------------------------------------------------- */
+        .wl-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
+        .wl-card {
+            position: relative; background: #fff; border: 1px solid #e5e8ec; border-radius: 8px;
+            padding: 16px 18px 14px; box-shadow: 0 1px 3px rgba(22,50,92,.06); overflow: hidden;
+        }
+        .wl-card::before { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: #0176d3; }
+        .wl-card.alert::before { background: #ea001e; }
+        .wl-card.good::before  { background: #2e844a; }
+        .wl-card .n { font-size: 30px; font-weight: 700; line-height: 1; display: block; color: #16325c; }
+        .wl-card.alert .n { color: #ba0517; }
+        .wl-card .l { font-size: 11px; text-transform: uppercase; color: #54698d; letter-spacing: .06em; margin-top: 8px; display: block; font-weight: 600; }
+        /* Table ------------------------------------------------------------ */
+        .wl-tablecard { background: #fff; border: 1px solid #e5e8ec; border-radius: 8px; box-shadow: 0 1px 3px rgba(22,50,92,.06); overflow: hidden; }
         table.wl { border-collapse: collapse; width: 100%; font-size: 13px; }
-        table.wl th, table.wl td { border: 1px solid #d8dde6; padding: 7px 10px; text-align: left; }
-        table.wl th { background: #eef1f6; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #54698d; }
-        table.wl td.num { text-align: right; font-variant-numeric: tabular-nums; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; white-space: nowrap; }
-        .badge.DELETED { background: #c23934; color: #fff; }
-        .badge.OUT_OF_STOCK { background: #ffb75d; color: #3e2c00; }
-        .badge.IN_STOCK { background: #04844b; color: #fff; }
-        .wl-empty, .wl-error { padding: 20px; border: 1px dashed #d8dde6; border-radius: 4px; color: #54698d; }
-        .wl-error { border-color: #c23934; color: #c23934; }
+        table.wl th, table.wl td { padding: 11px 16px; text-align: left; border-bottom: 1px solid #eef1f6; }
+        table.wl thead th {
+            position: sticky; top: 0; background: #f7f9fb; font-size: 10.5px; text-transform: uppercase;
+            letter-spacing: .05em; color: #54698d; font-weight: 700; border-bottom: 2px solid #e5e8ec; z-index: 1;
+        }
+        table.wl tbody tr:hover { background: #f5faff; }
+        table.wl tbody tr:last-child td { border-bottom: none; }
+        table.wl td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+        table.wl th.wait, table.wl td.wait { text-align: left; }
+        table.wl td.wait { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 15px; color: #16325c; }
+        table.wl td.sku { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; color: #3e3e3c; }
+        table.wl td.prod { color: #16325c; }
+        /* Status pills ----------------------------------------------------- */
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .badge.DELETED { background: #feded8; color: #ba0517; }
+        .badge.OUT_OF_STOCK { background: #fef3d9; color: #8f6a00; }
+        .badge.IN_STOCK { background: #ddf3e4; color: #2e844a; }
+        /* Empty / error ---------------------------------------------------- */
+        .wl-empty, .wl-error { padding: 28px; border-radius: 8px; color: #54698d; background: #fff; border: 1px dashed #c9ced6; text-align: center; font-size: 13.5px; }
+        .wl-error { border-color: #ea001e; color: #ba0517; background: #fff5f4; }
     </style>
 
     <div class="wl-wrap">
-        <h1>Waitlist Demand Report</h1>
-        <div class="wl-sub">
-            Back-in-stock signups aggregated by variant SKU across SFRA and PWA storefronts.
-            Generated ${report.generatedAt}.
+        <div class="wl-head">
+            <div>
+                <h1>Waitlist Demand Report</h1>
+                <div class="wl-sub">
+                    Back-in-stock signups aggregated by variant SKU across SFRA and PWA storefronts.
+                    <span class="gen">Generated ${report.generatedAt}.</span>
+                </div>
+            </div>
+            <isif condition="${empty(report.error) && rows.length > 0}">
+                <a class="wl-btn" style="color:#ffffff;" href="${URLUtils.url('WaitlistReport-Export')}">
+                    <svg viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 0 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 0 1 1.4-1.4L11 13.6V4a1 1 0 0 1 1-1zM5 19a1 1 0 0 1 1-1h12a1 1 0 0 1 0 2H6a1 1 0 0 1-1-1z"/></svg>
+                    Download CSV
+                </a>
+            </isif>
         </div>
 
         <isif condition="${!empty(report.error)}">
@@ -55,51 +106,49 @@
                     <span class="n"><isprint value="${totals.skus}" formatter="#,##0"/></span>
                     <span class="l">SKUs tracked</span>
                 </div>
-                <div class="wl-card">
+                <div class="wl-card good">
                     <span class="n"><isprint value="${totals.notified}" formatter="#,##0"/></span>
                     <span class="l">Already notified</span>
                 </div>
             </div>
 
-            <div class="wl-actions">
-                <a class="wl-btn" href="${URLUtils.url('WaitlistReport-Export')}">Download CSV</a>
-            </div>
-
-            <isif condition="${report.rows.length === 0}">
-                <div class="wl-empty">No waitlist subscriptions yet. Once shoppers tap "Notify me" on an out-of-stock product, demand appears here.</div>
+            <isif condition="${rows.length === 0}">
+                <div class="wl-empty">No waitlist subscriptions yet. Once shoppers tap &ldquo;Notify me&rdquo; on an out-of-stock product, demand appears here.</div>
             <iselse/>
-                <table class="wl">
-                    <thead>
-                        <tr>
-                            <th class="num">Waiting</th>
-                            <th>Status</th>
-                            <th>SKU</th>
-                            <th>Product</th>
-                            <th class="num">Notified</th>
-                            <th class="num">Failed</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <isloop items="${report.rows}" var="r">
+                <div class="wl-tablecard">
+                    <table class="wl">
+                        <thead>
                             <tr>
-                                <td class="num"><isprint value="${r.waiting}" formatter="#,##0"/></td>
-                                <td>
-                                    <isif condition="${r.status === 'DELETED'}">
-                                        <span class="badge DELETED">&#9888; Deleted</span>
-                                    <iselseif condition="${r.status === 'OUT_OF_STOCK'}"/>
-                                        <span class="badge OUT_OF_STOCK">Out of stock</span>
-                                    <iselse/>
-                                        <span class="badge IN_STOCK">In stock</span>
-                                    </isif>
-                                </td>
-                                <td>${r.sku}</td>
-                                <td>${r.productName}</td>
-                                <td class="num"><isprint value="${r.notified}" formatter="#,##0"/></td>
-                                <td class="num"><isprint value="${r.failed}" formatter="#,##0"/></td>
+                                <th class="wait" style="width: 14%;">Waiting</th>
+                                <th style="width: 12%;">Status</th>
+                                <th>SKU</th>
+                                <th>Product</th>
+                                <th class="num">Notified</th>
+                                <th class="num">Failed</th>
                             </tr>
-                        </isloop>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <isloop items="${rows}" var="r">
+                                <tr>
+                                    <td class="wait"><isprint value="${r.waiting}" formatter="#,##0"/></td>
+                                    <td>
+                                        <isif condition="${r.status === 'DELETED'}">
+                                            <span class="badge DELETED">&#9888; Deleted</span>
+                                        <iselseif condition="${r.status === 'OUT_OF_STOCK'}"/>
+                                            <span class="badge OUT_OF_STOCK">Out of stock</span>
+                                        <iselse/>
+                                            <span class="badge IN_STOCK">In stock</span>
+                                        </isif>
+                                    </td>
+                                    <td class="sku">${r.sku}</td>
+                                    <td class="prod">${r.productName}</td>
+                                    <td class="num"><isprint value="${r.notified}" formatter="#,##0"/></td>
+                                    <td class="num"><isprint value="${r.failed}" formatter="#,##0"/></td>
+                                </tr>
+                            </isloop>
+                        </tbody>
+                    </table>
+                </div>
             </isif>
         </isif>
     </div>

@@ -12,7 +12,13 @@
     Cache-safe: no CSRF token is embedded (the PDP is page-cacheable). The button
     fetches a fresh session-bound token from WaitList-Token at click time.
 </iscomment>
-<isset name="wlNotifyShow" value="${product.readyToOrder && !product.available && product.productType !== 'set' && product.productType !== 'bundle'}" scope="page" />
+<iscomment>
+    Same rule as the add-to-cart override: a resolved OOS variant, OR a fully
+    sold-out variation master (productType master + aggregate !available), so a
+    wholly out-of-stock style still offers Notify Me. Keyed to product.id (the
+    master id in the fallback case).
+</iscomment>
+<isset name="wlNotifyShow" value="${!product.available && product.productType !== 'set' && product.productType !== 'bundle' && (product.readyToOrder || product.productType === 'master')}" scope="page" />
 
 <div class="row waitlist-notify${wlNotifyShow ? '' : ' d-none'}" data-waitlist-block
     data-sku="${product.id}"

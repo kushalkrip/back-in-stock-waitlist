@@ -66,11 +66,21 @@ const ProductView = forwardRef((props, ref) => {
 
     const isProductASet = Boolean(product?.type?.set)
     const isProductABundle = Boolean(product?.type?.bundle)
+    const isProductAMaster = Boolean(product?.type?.master)
     const hasVariations = product?.variationAttributes?.length > 0
     // The resolved, orderable unit: the chosen variant, or the product itself
-    // when it has no variations.
+    // when it has no variations (falls back to the master id when a wholly
+    // sold-out master offers Notify Me without a resolved variant).
     const selectedSku = variant?.productId || product?.id
     const variantResolved = Boolean(variant?.productId) || !hasVariations
+
+    // A variation master with NO orderable variant at all: the whole style is
+    // sold out, so the shopper can never resolve a concrete unit. Offer Notify
+    // Me at the master level (keyed to the master id) rather than dead-ending.
+    // Mirrors the SFRA `productType === 'master' && !available` rule.
+    const variants = product?.variants || []
+    const masterHasNoOrderableVariant =
+        isProductAMaster && variants.length > 0 && variants.every((v) => !v.orderable)
 
     // Demo helper: append `?forceOOS=1` to any PDP URL to preview the Notify Me
     // state on an in-stock product without having to zero out inventory.
@@ -81,7 +91,7 @@ const ProductView = forwardRef((props, ref) => {
         !isProductASet &&
         !isProductABundle &&
         Boolean(selectedSku) &&
-        ((isOutOfStock && variantResolved) || forceOOS)
+        ((isOutOfStock && variantResolved) || masterHasNoOrderableVariant || forceOOS)
 
     if (!showNotifyMe) {
         return <BaseProductView ref={ref} {...props} />

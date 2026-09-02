@@ -65,12 +65,13 @@ is in [`cartridge/README.md` → *Install on an SFRA site*](cartridge/README.md#
 
 Three layers, one per concern. Each app owns its own runner:
 
-- **Jest** (storefront) — **17 tests** across two component suites. `notify-me`
+- **Jest** (storefront) — **19 tests** across two component suites. `notify-me`
   covers the identity branches (skeleton / guest / registered one-tap / already /
   done / error) and the submit path in mock + live mode; `product-view` covers the
   buy-box wrapper — passthrough when in stock / loading / set / bundle / unresolved
   variant, and the swap (drop `addToCart`/`updateCart`, inject `NotifyMeForm` via
-  `customButtons`) for a resolved OOS variant plus the `?forceOOS=1` preview.
+  `customButtons`) for a resolved OOS variant, the master-level fallback when every
+  variant is unorderable, plus the `?forceOOS=1` preview.
   `product-view` is at 100% line/branch coverage.
   ```bash
   cd storefront && npm test
@@ -97,7 +98,7 @@ Three layers, one per concern. Each app owns its own runner:
   npx playwright show-report                # open the last HTML report
   ```
 
-- **Mocha** (cartridge) — **93 tests** covering every server-side module. The
+- **Mocha** (cartridge) — **95 tests** covering every server-side module. The
   `dw/*` platform classes and `*/cartridge/...` requires are stubbed with
   `sinon` + `proxyquire` (`superModule` overrides are injected via a custom
   `Module._compile`), so the job lifecycle, the SCAPI handlers and the SFRA hooks
@@ -117,4 +118,4 @@ Three layers, one per concern. Each app owns its own runner:
   | Login redirect | `scripts/helpers/accountHelpers.js` | one-shot stashed return URL vs delegate-to-base |
   | Demo seeder | `scripts/steps/seedInventory.js` | allocation writes, distinct PENDING derivation, SeedLimit cap, NO_LIST guard |
   | Demand report | `scripts/helpers/waitlistDemand.js` + `scripts/steps/waitlistDemandReport.js` | ranking/CSV aggregation + timestamped IMPEX export, mkdirs, error mapping |
-  | SFRA client + controller | `client/notify.js`, `controllers/WaitList.js` | `shouldShowNotify` / `buildSubscribeBody` / `stripWlNotified`, controller gating |
+  | SFRA client + controller | `client/notify.js`, `controllers/WaitList.js` | `shouldShowNotify` (resolved OOS variant **or** wholly sold-out master) / `buildSubscribeBody` / `stripWlNotified`, controller gating |

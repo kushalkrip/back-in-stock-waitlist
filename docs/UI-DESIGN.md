@@ -177,9 +177,10 @@ existing binary `showNotifyMe`, unchanged in shape:
 
 ```
 showAddToCart  = variantResolved && !isOutOfStock         // FULL and PARTIAL (base app caps qty)
-showNotifyMe   = variantResolved && (isOutOfStock || forceOOS)
+showNotifyMe   = (variantResolved && isOutOfStock) || masterHasNoOrderableVariant || forceOOS
 // binary: Notify Me REPLACES Add-to-Cart when fully OOS; the two never coexist.
 // PARTIAL stock is NOT a Notify-Me trigger — base app inventory message handles it.
+// masterHasNoOrderableVariant: wholly sold-out master (no resolvable variant) — §4.4.
 ```
 
 ---
@@ -293,12 +294,27 @@ this feature adds nothing to the partial branch.
 
 ### 4.4 Master-product-with-no-variant-selected case
 `variantResolved = Boolean(variant?.productId) || !hasVariations` (existing logic in
-`product-view.jsx`, kept as-is). While `!variantResolved`:
-- Add-to-Cart: disabled, existing "Please select all your options above" message.
-- Notify Me: **hidden entirely.** We deliberately do not offer "notify me for any size" —
-  the SCAPI waitlist payload requires a concrete `sku` (`variant?.productId || product?.id`),
-  and a master-level subscription is a different feature (see §10, out of scope) that would
-  need its own SCAPI contract (subscribe-to-master, fan out to variants at fulfillment time).
+`product-view.jsx`, kept as-is). While `!variantResolved`, the behavior splits on whether
+the master has **any** orderable variant:
+
+- **Some variant still orderable** (partially in stock): Add-to-Cart disabled with the
+  existing "Please select all your options above" message; **Notify Me hidden.** We still
+  do not offer "notify me for any size" here — the shopper can and should pick the size they
+  want, and a resolved OOS variant then gets the normal per-SKU Notify Me.
+
+- **No variant orderable** (the whole style is sold out): **Notify Me shown at the master
+  level**, keyed to the master `product.id`. This is a deliberate, *narrow* addition on top
+  of the original binary rule, forced by a platform reality: **base SFRA greys out every OOS
+  variation value**, so a wholly sold-out master can never resolve a variant from the
+  dropdown — without this branch the shopper hits a dead end (disabled Add-to-Cart, no
+  waitlist affordance). It needs **no new SCAPI contract**: the master id *is* a valid `sku`,
+  and the notify job's aggregate `availabilityModel.isInStock(threshold)` on a master returns
+  true the moment **any** variant is replenished, so a master subscriber is notified without
+  a subscribe-to-master fan-out. Detection is cheap and exact — a master's `available` (SFRA)
+  / `variants.every(v => !v.orderable)` (PWA) *is* the "zero orderable variants" signal.
+  Trade-off: master-level granularity is coarser than per-size ("back in some size" rather
+  than "back in *your* size"), which is the correct semantic when no size is orderable to
+  begin with.
 
 ---
 

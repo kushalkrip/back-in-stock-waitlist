@@ -18,7 +18,17 @@
     assets.addJs('/js/waitlist.js');
 </isscript>
 
-<isset name="wlNotify" value="${product.readyToOrder && !product.available && product.productType !== 'set' && product.productType !== 'bundle'}" scope="page" />
+<iscomment>
+    Show Notify Me for an out-of-stock unit that is either (a) a fully resolved
+    variant, or (b) a variation MASTER with no orderable variants at all. Case
+    (b) matters because base SFRA greys out every OOS variation value, so a
+    wholly sold-out master can never resolve a variant from the dropdown -- a
+    dead end without this fallback. A master's `available` is the AGGREGATE
+    orderability, so `productType==='master' && !available` means precisely
+    "zero orderable variants". The subscription is keyed to the master id; the
+    notify job's aggregate isInStock() fires when ANY variant is replenished.
+</iscomment>
+<isset name="wlNotify" value="${!product.available && product.productType !== 'set' && product.productType !== 'bundle' && (product.readyToOrder || product.productType === 'master')}" scope="page" />
 
 <div class="row cart-and-ipay${wlNotify ? ' d-none' : ''}" data-waitlist-atc>
     <div class="col-sm-12">

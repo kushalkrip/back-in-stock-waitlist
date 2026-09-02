@@ -31,6 +31,14 @@ describe('client/waitlist/notify (pure logic)', function () {
         it('treats a missing available flag as not-shown (strict false only)', function () {
             assert.isFalse(notify.shouldShowNotify({ readyToOrder: true, productType: 'variant' }));
         });
+        it('shows for a wholly sold-out master even with no resolved variant', function () {
+            // base SFRA greys every OOS variation value, so the master can never
+            // resolve a variant; !available on a master == zero orderable variants.
+            assert.isTrue(notify.shouldShowNotify({ readyToOrder: false, available: false, productType: 'master' }));
+        });
+        it('hides for a master that is still available (some variant in stock)', function () {
+            assert.isFalse(notify.shouldShowNotify({ readyToOrder: false, available: true, productType: 'master' }));
+        });
     });
 
     describe('buildSubscribeBody', function () {
